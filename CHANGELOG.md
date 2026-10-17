@@ -10,6 +10,9 @@
 - **Quieter notices:** failed shell commands no longer raise one each (the feed shows them, and
   repeated failures raise a warning); the same notice again is counted (`×4`) instead of stacking;
   notices slide in whole.
+- **Windows:** a Windows build and a PowerShell installer; sessions are found under
+  `%USERPROFILE%\.claude` and checked with the Windows process API; paths with `\` are read
+  everywhere; Windows Terminal gets 24-bit color. Tested by CI, not yet against real sessions.
 - Hidden `--jump-check` and `--bench-hud` options for diagnostics.
 
 ## 0.1.0 (2026-10-17)

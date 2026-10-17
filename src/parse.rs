@@ -100,7 +100,7 @@ pub fn command_word(cmd: &str) -> String {
             match w {
                 "cd" | "export" | "set" => break,
                 "time" | "timeout" | "env" | "nice" | "sudo" | "exec" | "command" => continue,
-                _ => return w.rsplit('/').next().unwrap_or(w).to_string(),
+                _ => return file_name(w).trim_end_matches(".exe").to_string(),
             }
         }
     }
@@ -115,8 +115,19 @@ fn first_string(v: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
+/// The last part of a path, whatever its separators (`/`, or `\` on Windows).
+pub fn file_name(p: &str) -> &str {
+    p.rsplit(['/', '\\']).find(|s| !s.is_empty()).unwrap_or(p)
+}
+
+/// The path relative to `root` when it lies inside it.
+pub fn under<'a>(path: &'a str, root: &str) -> Option<&'a str> {
+    let rest = path.strip_prefix(root)?;
+    rest.strip_prefix(['/', '\\']).filter(|r| !r.is_empty())
+}
+
 fn short_path(p: &str) -> String {
-    let parts: Vec<&str> = p.split('/').filter(|s| !s.is_empty()).collect();
+    let parts: Vec<&str> = p.split(['/', '\\']).filter(|s| !s.is_empty()).collect();
     if parts.len() <= 2 {
         return p.to_string();
     }
@@ -251,6 +262,12 @@ mod tests {
         assert_eq!(short_model("claude-opus-5-5"), "opus-5-5");
         assert_eq!(short_model("eu.anthropic.claude-haiku-4-5-20251001"), "haiku-4-5");
         assert_eq!(clip("abcdef", 4), "abc…");
+        assert_eq!(file_name("/home/me/src/ui.rs"), "ui.rs");
+        assert_eq!(file_name("C:\\Users\\me\\src\\ui.rs"), "ui.rs");
+        assert_eq!(under("C:\\code\\app\\src\\a.rs", "C:\\code\\app"), Some("src\\a.rs"));
+        assert_eq!(under("/code/app/src/a.rs", "/code/app"), Some("src/a.rs"));
+        assert_eq!(under("/code/apple/a.rs", "/code/app"), None);
+        assert_eq!(command_word("C:\\tools\\cargo.exe build"), "cargo");
     }
 
     #[test]

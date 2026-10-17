@@ -427,7 +427,7 @@ fn collect_toasts(app: &mut App, world: &World) -> bool {
         let key = format!("collide:{}", c.path);
         if app.warned.insert(key.clone()) && ready {
             let who: Vec<String> = c.sessions().iter().map(|si| names.get(si).cloned().unwrap_or_default()).collect();
-            let file = c.path.rsplit('/').next().unwrap_or(&c.path).to_string();
+            let file = crate::parse::file_name(&c.path).to_string();
             fresh.push(Toast::new("✖", format!("collision · {file} · {}", who.join(" + ")), t.err));
         }
         live.insert(key);
@@ -921,7 +921,7 @@ fn card(f: &mut Frame, rect: Rect, app: &App, world: &World, si: usize, k: usize
         chips.push(Span::styled(text, Style::new().fg(color)));
     };
     if let Some(c) = ins.collides(si) {
-        chip(format!("✖ {}", c.path.rsplit('/').next().unwrap_or(&c.path)), t.err);
+        chip(format!("✖ {}", crate::parse::file_name(&c.path)), t.err);
     }
     let mut warns = ins.of(si);
     if let Some(a) = warns.next() {

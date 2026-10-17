@@ -112,12 +112,12 @@ pub fn gather(world: &World, order: &[usize], window: i64, ins: &Insights) -> (V
     let mut districts: Vec<District> = Vec::new();
     let mut by_root: HashMap<String, usize> = HashMap::new();
     for (i, l) in lots.iter_mut().enumerate() {
-        let root = roots.iter().filter(|r| l.path.starts_with(&format!("{}/", r.0))).max_by_key(|r| r.0.len());
+        let root = roots.iter().filter(|r| crate::parse::under(&l.path, &r.0).is_some()).max_by_key(|r| r.0.len());
         let (key, name, k) = match root {
             Some((root, k, name)) => (root.clone(), name.clone(), *k),
             None => (String::new(), "elsewhere".to_string(), usize::MAX),
         };
-        l.rel = if key.is_empty() { tilde(&l.path) } else { l.path[key.len() + 1..].to_string() };
+        l.rel = if key.is_empty() { tilde(&l.path) } else { crate::parse::under(&l.path, &key).unwrap_or(&l.path).to_string() };
         let d = *by_root.entry(key.clone()).or_insert_with(|| {
             districts.push(District { name, root: key, k, lots: Vec::new() });
             districts.len() - 1
@@ -131,7 +131,7 @@ pub fn gather(world: &World, order: &[usize], window: i64, ins: &Insights) -> (V
 }
 
 fn tilde(p: &str) -> String {
-    match std::env::var("HOME") {
+    match std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
         Ok(h) if !h.is_empty() && p.starts_with(&h) => format!("~{}", &p[h.len()..]),
         _ => p.to_string(),
     }
@@ -440,7 +440,7 @@ fn side_panel(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usiz
             .map(|c| {
                 let who: Vec<String> = c.sessions().iter().map(|si| names.get(si).cloned().unwrap_or_default()).collect();
                 fit(
-                    vec![Span::styled(format!("{} ", clip(c.path.rsplit('/').next().unwrap_or(&c.path), 18)), Style::new().fg(t.err))],
+                    vec![Span::styled(format!("{} ", clip(crate::parse::file_name(&c.path), 18)), Style::new().fg(t.err))],
                     who.join(" + "),
                     Style::new().fg(t.fg),
                     vec![],
@@ -469,7 +469,7 @@ fn side_panel(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usiz
             }
             fit(
                 vec![Span::styled(format!("{:<6} ", "▇".repeat(bar.min(6))), Style::new().fg(color))],
-                l.path.rsplit('/').next().unwrap_or(&l.path).to_string(),
+                crate::parse::file_name(&l.path).to_string(),
                 style,
                 vec![Span::styled(format!("+{} −{}", fmt_n(l.added as u64), fmt_n(l.removed as u64)), Style::new().fg(t.faint))],
                 w,

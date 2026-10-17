@@ -561,7 +561,7 @@ impl Session {
 
     /// Project folder name, the most recognizable label for a session.
     pub fn project(&self) -> &str {
-        self.cwd.rsplit('/').find(|s| !s.is_empty()).unwrap_or(&self.name)
+        self.cwd.rsplit(['/', '\\']).find(|s| !s.is_empty()).unwrap_or(&self.name)
     }
 
     pub fn has_agent(&self, id: &str) -> bool {

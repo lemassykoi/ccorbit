@@ -29,7 +29,8 @@ OPTIONS:
     --replay <FILE>      Play back a transcript (.jsonl) instead of watching live sessions
     --speed <N>          Replay speed multiplier (default 20)
     --theme <NAME>       phosphor (default), amber or neon
-    --claude-dir <DIR>   Claude Code data directory (default: $CLAUDE_CONFIG_DIR or ~/.claude)
+    --claude-dir <DIR>   Claude Code data directory (default: $CLAUDE_CONFIG_DIR, or .claude in
+                         your home folder)
     --hud                Start on the HUD (the live graph) instead of the wall
     --director           Start on the HUD with the director at the camera
     --demo               Show made-up sessions instead of yours (to try it, or record it)
@@ -63,7 +64,9 @@ pub struct Opts {
 fn parse_args() -> Result<Opts, String> {
     let claude_dir = match std::env::var_os("CLAUDE_CONFIG_DIR") {
         Some(d) => PathBuf::from(d),
-        None => PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?).join(".claude"),
+        // `HOME` on macOS and Linux, `USERPROFILE` on Windows.
+        None => PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).ok_or("neither HOME nor USERPROFILE is set")?)
+            .join(".claude"),
     };
     let mut o = Opts { claude_dir, replay: None, speed: 20.0, theme: 0, boot: true, dump: false, snapshot: None, hud: false, director: false, demo: false, allow_jump: false, fps: 30, snapshot_html: None };
     let mut args = std::env::args().skip(1);

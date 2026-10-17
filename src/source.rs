@@ -526,7 +526,33 @@ fn pid_alive(pid: i64) -> bool {
     pid > 0 && unsafe { kill(pid, 0) } == 0
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn pid_alive(pid: i64) -> bool {
+    type Handle = *mut core::ffi::c_void;
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
+        fn GetExitCodeProcess(process: Handle, code: *mut u32) -> i32;
+        fn CloseHandle(handle: Handle) -> i32;
+    }
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const STILL_ACTIVE: u32 = 259;
+    let Ok(pid) = u32::try_from(pid) else { return false };
+    // SAFETY: the handle is checked before use and closed once; only its exit code is queried,
+    // which needs no more than the limited query right.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return false;
+        }
+        let mut code = 0u32;
+        let ok = GetExitCodeProcess(handle, &mut code) != 0;
+        CloseHandle(handle);
+        ok && code == STILL_ACTIVE
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn pid_alive(_pid: i64) -> bool {
     true
 }

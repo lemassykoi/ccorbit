@@ -26,6 +26,12 @@ On macOS or Linux, the prebuilt binary:
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/pcangemi/ccorbit/releases/latest/download/ccorbit-installer.sh | sh
 ```
 
+On Windows, in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/pcangemi/ccorbit/releases/latest/download/ccorbit-installer.ps1 | iex"
+```
+
 With Homebrew:
 
 ```sh
@@ -47,9 +53,11 @@ ccorbit --director   # the hologram with the camera running itself, for a second
 ccorbit --demo       # made-up sessions: try it without Claude Code running
 ```
 
-It is built and tested on macOS and Linux, in any terminal with mouse support. Gradients and fog
-look best with 24-bit color (`COLORTERM=truecolor`, which Ghostty, iTerm2, WezTerm, kitty and Warp
-set); other terminals get the nearest 256-color shades.
+It runs on macOS, Linux and Windows, in any terminal with mouse support. It is used daily on macOS
+and tested on all three by CI. On Windows it has not yet been tried against real Claude Code
+sessions, so reports are welcome; under WSL, the Linux build works where Claude Code runs in WSL.
+Gradients and fog look best with 24-bit color (Ghostty, iTerm2, WezTerm, kitty, Warp and Windows
+Terminal all have it); other terminals get the nearest 256-color shades.
 
 ### From source
 
@@ -215,7 +223,7 @@ again shows once, with a count) announce:
 | `--replay <FILE>` | Play back a recorded transcript (`~/.claude/projects/<project>/<session>.jsonl`) |
 | `--speed <N>` | Replay speed, default 20 (idle stretches are skipped) |
 | `--theme <NAME>` | `phosphor` (default), `amber` or `neon` |
-| `--claude-dir <DIR>` | Claude Code data directory, default `$CLAUDE_CONFIG_DIR` or `~/.claude` |
+| `--claude-dir <DIR>` | Claude Code data directory, default `$CLAUDE_CONFIG_DIR`, or `.claude` in your home folder (`%USERPROFILE%` on Windows) |
 | `--no-boot` | Skip the boot animation |
 | `--dump` | Print every session and its readings as plain text, then exit |
 
@@ -226,7 +234,7 @@ no network. The exception, off by default, is `--allow-jump` (see above).
 
 | Path | Used for |
 |---|---|
-| `sessions/<pid>.json` | Which sessions run now. The `.key` files beside them are never opened. A session counts as running while its process exists (checked with signal 0, which sends nothing). |
+| `sessions/<pid>.json` | Which sessions run now. The `.key` files beside them are never opened. A session counts as running while its process exists (checked with signal 0, which sends nothing; on Windows, by asking for the process's exit code). |
 | `projects/<folder>/<session>.jsonl` | Prompts, steps, results, token usage, compactions, background task notices, title |
 | `projects/<folder>/<session>/subagents/` | Subagents, and the agents of running workflows (`subagents/workflows/<run>/`) |
 | `projects/<folder>/<session>/workflows/wf_*.json` | Finished workflow runs: phases, agents, durations |

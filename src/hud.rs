@@ -1123,7 +1123,7 @@ fn build(
     // Two sessions changing one file: a flashing link between them.
     for c in collisions {
         let ss: Vec<usize> = c.sessions().iter().filter_map(|si| session_ix.get(si).copied()).collect();
-        let file = c.path.rsplit('/').next().unwrap_or(&c.path).to_string();
+        let file = parse::file_name(&c.path).to_string();
         for pair in ss.windows(2) {
             edges.push(Edge { a: pair[0], b: pair[1], active: true, color: t.err, shared: false, alarm: Some(file.clone()) });
         }

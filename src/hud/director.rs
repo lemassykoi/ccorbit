@@ -132,7 +132,7 @@ impl Director {
                 let who: Vec<String> = c.sessions().iter().map(|&si| name(si)).collect();
                 if let Some(&si) = c.sessions().first() {
                     let node = format!("s:{}", world.sessions[si].id);
-                    shot(node, 9, format!("✖ collision · {}", c.path.rsplit('/').next().unwrap_or(&c.path)), who.join(" + "), t.err);
+                    shot(node, 9, format!("✖ collision · {}", crate::parse::file_name(&c.path)), who.join(" + "), t.err);
                 }
             }
         }

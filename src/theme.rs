@@ -79,7 +79,8 @@ pub fn index(name: &str) -> Option<usize> {
 
 pub fn truecolor() -> bool {
     static TC: OnceLock<bool> = OnceLock::new();
-    *TC.get_or_init(|| matches!(std::env::var("COLORTERM").as_deref(), Ok("truecolor") | Ok("24bit")))
+    // Windows Terminal shows 24-bit color but does not say so in COLORTERM; it sets WT_SESSION.
+    *TC.get_or_init(|| matches!(std::env::var("COLORTERM").as_deref(), Ok("truecolor") | Ok("24bit")) || std::env::var_os("WT_SESSION").is_some())
 }
 
 pub fn rgb((r, g, b): Rgb) -> Color {
