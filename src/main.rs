@@ -1,5 +1,6 @@
 //! ccorbit: a retro, read-only live view of every Claude Code session on this machine.
 
+mod demo;
 mod hud;
 mod insight;
 mod model;
@@ -30,6 +31,7 @@ OPTIONS:
     --claude-dir <DIR>   Claude Code data directory (default: $CLAUDE_CONFIG_DIR or ~/.claude)
     --hud                Start on the HUD (the live graph) instead of the wall
     --director           Start on the HUD with the director at the camera
+    --demo               Show made-up sessions instead of yours (to try it, or record it)
     --no-boot            Skip the boot animation
     --dump               Print the current state as plain text and exit
     -h, --help           Show this help
@@ -48,6 +50,7 @@ pub struct Opts {
     pub snapshot: Option<(u16, u16)>,
     pub hud: bool,
     pub director: bool,
+    pub demo: bool,
     pub snapshot_html: Option<(u16, u16, PathBuf)>,
 }
 
@@ -56,7 +59,7 @@ fn parse_args() -> Result<Opts, String> {
         Some(d) => PathBuf::from(d),
         None => PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?).join(".claude"),
     };
-    let mut o = Opts { claude_dir, replay: None, speed: 20.0, theme: 0, boot: true, dump: false, snapshot: None, hud: false, director: false, snapshot_html: None };
+    let mut o = Opts { claude_dir, replay: None, speed: 20.0, theme: 0, boot: true, dump: false, snapshot: None, hud: false, director: false, demo: false, snapshot_html: None };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -84,6 +87,7 @@ fn parse_args() -> Result<Opts, String> {
             "--no-boot" => o.boot = false,
             "--hud" => o.hud = true,
             "--director" => o.director = true,
+            "--demo" => o.demo = true,
             "--dump" => o.dump = true,
             // Undocumented: prints one frame of each view, for checking the layout without a terminal.
             "--snapshot" => {
@@ -120,6 +124,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         },
+        None if opts.demo => source::World::demo(),
         None => source::World::live(opts.claude_dir.clone()),
     };
     if let Some((w, h, dir)) = &opts.snapshot_html {

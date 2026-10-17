@@ -9,6 +9,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::Value;
 
+use crate::demo::Demo;
 use crate::model::{PastRun, Session};
 use crate::tail::Tail;
 use crate::time::{now_ms, parse_iso_ms};
@@ -27,6 +28,7 @@ pub struct World {
 pub enum Mode {
     Live(Live),
     Replay(Replay),
+    Demo(Demo),
 }
 
 pub struct Live {
@@ -82,6 +84,17 @@ impl World {
         }
     }
 
+    /// Made-up sessions, generated as they go (`--demo`).
+    pub fn demo() -> World {
+        let now = now_ms();
+        let (demo, sessions, history) = Demo::start(now);
+        World { sessions, now, history, mode: Mode::Demo(demo) }
+    }
+
+    pub fn is_demo(&self) -> bool {
+        matches!(self.mode, Mode::Demo(_))
+    }
+
     /// Indexes a transcript and its subagent and workflow files for playback.
     pub fn replay(path: &Path, speed: f64) -> io::Result<World> {
         let id = path.file_stem().and_then(|s| s.to_str()).unwrap_or("replay").to_string();
@@ -134,6 +147,10 @@ impl World {
                 live_tick(live, &mut self.sessions, &mut self.history)
             }
             Mode::Replay(r) => replay_tick(r, &mut self.sessions, &mut self.now, false),
+            Mode::Demo(d) => {
+                self.now = now_ms();
+                d.tick(self.now, &mut self.sessions, &mut self.history)
+            }
         }
     }
 
@@ -147,27 +164,31 @@ impl World {
             Mode::Replay(r) => {
                 replay_tick(r, &mut self.sessions, &mut self.now, true);
             }
+            Mode::Demo(d) => {
+                self.now = now_ms();
+                d.tick(self.now, &mut self.sessions, &mut self.history);
+            }
         }
     }
 
     pub fn replay_state(&self) -> Option<&Replay> {
         match &self.mode {
             Mode::Replay(r) => Some(r),
-            Mode::Live(_) => None,
+            _ => None,
         }
     }
 
     pub fn replay_mut(&mut self) -> Option<&mut Replay> {
         match &mut self.mode {
             Mode::Replay(r) => Some(r),
-            Mode::Live(_) => None,
+            _ => None,
         }
     }
 
     pub fn animating(&self) -> bool {
         match &self.mode {
             Mode::Replay(r) => !r.done() && !r.paused,
-            Mode::Live(_) => self.sessions.iter().any(Session::busy),
+            Mode::Live(_) | Mode::Demo(_) => self.sessions.iter().any(Session::busy),
         }
     }
 }

@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["claude", "claude-code", "tui", "monitoring", "terminal"]
 categories = ["command-line-utilities", "development-tools"]
-publish = false
+exclude = ["docs/", ".github/", "dist-workspace.toml"]
 
 [dependencies]
 ratatui = { version = "0.29", default-features = false, features = ["crossterm"] }
@@ -21,3 +21,7 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# The profile that 'dist' builds releases with: the release profile as it is.
+[profile.dist]
+inherits = "release"

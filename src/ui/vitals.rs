@@ -144,7 +144,7 @@ pub fn ctx_gauge(fc: &Forecast, width: usize, t: &Theme) -> Vec<Span<'static>> {
 }
 
 /// One line about the next compaction: the ceiling, how near it is, how many happened.
-pub fn compaction_text(s: &Session, fc: &Forecast) -> String {
+pub fn compaction_text(s: &Session, fc: &Forecast, now: i64) -> String {
     let mut out = format!(
         "{} / {} {}",
         fmt_n(fc.ctx),
@@ -158,7 +158,7 @@ pub fn compaction_text(s: &Session, fc: &Forecast) -> String {
     }
     if let Some(last) = s.compactions.last() {
         let n = s.compactions.len();
-        out.push_str(&format!(" · {n} compaction{}, last at {}", if n == 1 { "" } else { "s" }, fmt_n(last.pre)));
+        out.push_str(&format!(" · {n} compaction{}, last at {} {} ago", if n == 1 { "" } else { "s" }, fmt_n(last.pre), fmt_dur(now - last.at)));
     }
     out
 }

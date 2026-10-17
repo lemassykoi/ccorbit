@@ -656,6 +656,10 @@ fn header(f: &mut Frame, area: Rect, app: &App, world: &World, ins: &Insights) {
             ),
             Style::new().fg(t.accent).add_modifier(Modifier::BOLD),
         )),
+        None if world.is_demo() => {
+            left.push(Span::styled(" DEMO ", Style::new().fg(t.bg).bg(t.accent).add_modifier(Modifier::BOLD)));
+            left.push(Span::styled(" made-up sessions ", Style::new().fg(t.accent)));
+        }
         None => {
             let on = busy == 0 || (app.ms() / 500) % 2 == 0;
             left.push(Span::styled(if on { "● LIVE " } else { "○ LIVE " }, Style::new().fg(t.ok).add_modifier(Modifier::BOLD)));
@@ -1581,7 +1585,7 @@ fn vitals_panel(f: &mut Frame, area: Rect, app: &App, world: &World, s: &Session
     let fc = insight::forecast(world, s);
     let mut spans = vec![Span::styled(" ctx ", Style::new().fg(t.dim))];
     spans.extend(vitals::ctx_gauge(&fc, 12, t));
-    spans.push(Span::styled(format!("  {}", vitals::compaction_text(s, &fc)), Style::new().fg(t.dim)));
+    spans.push(Span::styled(format!("  {}", vitals::compaction_text(s, &fc, now)), Style::new().fg(t.dim)));
     lines.push(Line::from(spans));
     f.render_widget(Paragraph::new(lines), inner);
 }

@@ -1,5 +1,9 @@
 # ccorbit
 
+[![CI](https://github.com/pcangemi/ccorbit/actions/workflows/ci.yml/badge.svg)](https://github.com/pcangemi/ccorbit/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/ccorbit.svg)](https://crates.io/crates/ccorbit)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+
 A live terminal view of every Claude Code session running on your machine. It shows sessions,
 subagents, workflows, skills, MCP servers, token flow, cost and context, as a wall of cards, a
 live tree per session, a 3D hologram you can turn with the mouse, and a city of the files being
@@ -9,43 +13,51 @@ It is a single Rust binary of about 1.2 MB. It only reads the files Claude Code 
 never writes, never runs a command and never opens a network connection. It uses 2 to 3% CPU and
 9 to 13 MB of memory, the 3D hologram included.
 
-```
-▐ ◆ CCORBIT ▌ ● LIVE  3 sessions · 2 busy · 4 agents running   ⇡ 1.4M/m ⇣ 6.8k/m ≈$44/h
-╭ ⠋ webapp ────────────────────────── BUSY ╮ ╭ ● api ─────────────────────────── IDLE ╮
-│Checkout redesign                         │▌│Rate limiter                            │▌
-│⠋ Bash  Run the integration tests     26s │▌│✓ Edit  …/limiter/token_bucket.go 2m ago│▌
-│◆ 2 running of 7  ↻ 1 bg  ✦ 2 skills      │▌│⚠ Bash ×4 in a row  ◆ 1 agent           │▌
-│⇡ 991k/m ⇣ 2.5k/m ▸····▸····▸  ██░░░░ 25% │▌│⇡    0/m ⇣    0/m ··········  ███░░ 31% │▌
-│⠤⠔⠉⠢⠤⠒⠊⠑⠤⠤⠒⠉⠢⠔⠒⠉ ◉ 99% ≈$125 opus-5-5    │▌│⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠢⠤⠤⠤ ◉ 97% ≈$31 sonnet-5-5  │▌
-│› run the full suite and fix what breaks  │▌│› make the limiter per tenant           │▌
-╰──────────────────────────────────────────╯▌╰────────────────────────────────────────╯▌
-```
+![ccorbit in demo mode: the wall of sessions, a session's vitals, the 3D hologram, the director and the code city](docs/demo.gif)
+
+<sub>Recorded with `ccorbit --demo`: made-up sessions, nothing real.</sub>
 
 ## Install
 
-You need a Rust toolchain recent enough for edition 2024 (rustc 1.85 or newer):
-`brew install rust` on macOS, or [rustup](https://rustup.rs) anywhere.
+On macOS or Linux, the prebuilt binary:
 
 ```sh
-git clone https://github.com/pcangemi/ccorbit.git
-cd ccorbit
-cargo build --release
-mkdir -p ~/.local/bin && cp target/release/ccorbit ~/.local/bin/
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/pcangemi/ccorbit/releases/latest/download/ccorbit-installer.sh | sh
 ```
 
-Or in one step: `cargo install --git https://github.com/pcangemi/ccorbit`.
+With Homebrew:
 
-Make sure `~/.local/bin` (or `~/.cargo/bin` after `cargo install`) is on your `PATH`, then run:
+```sh
+brew install pcangemi/tap/ccorbit
+```
+
+With Cargo (Rust 1.85 or newer):
+
+```sh
+cargo install ccorbit
+```
+
+Then run it:
 
 ```sh
 ccorbit              # the wall of sessions
 ccorbit --hud        # start on the 3D hologram
 ccorbit --director   # the hologram with the camera running itself, for a second screen
+ccorbit --demo       # made-up sessions: try it without Claude Code running
 ```
 
-It is built and tested on macOS and should work on Linux, in any terminal with mouse support. Gradients and fog look best with
-24-bit color (`COLORTERM=truecolor`, which Ghostty, iTerm2, WezTerm, kitty and Warp set); other
-terminals get the nearest 256-color shades.
+It is built and tested on macOS and Linux, in any terminal with mouse support. Gradients and fog
+look best with 24-bit color (`COLORTERM=truecolor`, which Ghostty, iTerm2, WezTerm, kitty and Warp
+set); other terminals get the nearest 256-color shades.
+
+### From source
+
+```sh
+git clone https://github.com/pcangemi/ccorbit.git
+cd ccorbit
+cargo build --release
+cp target/release/ccorbit ~/.local/bin/
+```
 
 ### If the build fails on macOS
 
@@ -173,6 +185,7 @@ Below the cards:
 | Option | Effect |
 |---|---|
 | `--hud` | Start on the hologram |
+| `--demo` | Show made-up sessions instead of yours: to try it, or to record it without showing your work |
 | `--director` | Start on the hologram with the director at the camera |
 | `--replay <FILE>` | Play back a recorded transcript (`~/.claude/projects/<project>/<session>.jsonl`) |
 | `--speed <N>` | Replay speed, default 20 (idle stretches are skipped) |
@@ -211,7 +224,7 @@ message bodies, file contents or edited text. It never writes anything anywhere.
 ## Development
 
 ```sh
-cargo test                     # 14 tests: parsing, lifecycles, readings, prices, HUD hit tests
+cargo test                     # parsing, lifecycles, readings, prices, the demo, HUD hit tests
 cargo run --release -- --dump  # check the readings against your own sessions
 ```
 
@@ -229,7 +242,12 @@ cargo run --release -- --dump  # check the readings against your own sessions
 | `src/ui/city.rs` | The code city |
 | `src/hud.rs` | The hologram: layout, camera, animation, packets, hit tests, target panel |
 | `src/hud/director.rs` | The director |
+| `src/demo.rs` | The made-up sessions of `--demo`, written as transcript records |
 | `src/theme.rs` | Palettes, gradients, fog and the 256-color fallback |
+
+`docs/demo.tape` records `docs/demo.gif` with [vhs](https://github.com/charmbracelet/vhs). Releases
+are built by [dist](https://axodotdev.github.io/cargo-dist/): pushing a version tag (`v0.2.0`)
+builds the binaries, the installer and the Homebrew formula.
 
 Two hidden options help check the layout without a terminal:
 

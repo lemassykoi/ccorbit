@@ -155,12 +155,6 @@ impl Tokens {
             thinking: self.thinking.saturating_sub(o.thinking),
         }
     }
-
-    /// Share of the input served from the cache.
-    pub fn hit_ratio(&self) -> Option<f64> {
-        let all = self.fresh + self.cache_write + self.cache_read;
-        (all > 0).then(|| self.cache_read as f64 / all as f64)
-    }
 }
 
 /// What a session spends its time on, read from the gaps between transcript records: each
@@ -327,11 +321,6 @@ impl Agent {
         self.current = t;
         self.ctx = t.input + t.cache_read;
         (t.minus(before), fresh_msg)
-    }
-
-    /// Usage of the latest API call.
-    pub fn last_call(&self) -> Tokens {
-        self.current
     }
 }
 
@@ -574,6 +563,10 @@ impl Session {
 
     pub fn has_agent(&self, id: &str) -> bool {
         self.agent_ids.contains_key(id)
+    }
+
+    pub fn agent_index(&self, id: &str) -> Option<usize> {
+        self.agent_ids.get(id).copied()
     }
 
     /// Registers a subagent and hangs it under the step that spawned it, now or once seen.
@@ -1378,8 +1371,6 @@ pub struct PastRun {
     pub status: String,
     /// Each phase's start and end, as offsets from the run's start.
     pub spans: Vec<Option<(i64, i64)>>,
-    pub agents: usize,
-    pub tokens: u64,
 }
 
 impl PastRun {
@@ -1415,8 +1406,6 @@ impl PastRun {
             dur,
             status: s("status"),
             spans,
-            agents: agents.len(),
-            tokens: v.get("totalTokens").and_then(Value::as_u64).unwrap_or(0),
         })
     }
 }
@@ -1544,6 +1533,5 @@ mod tests {
             {"type":"workflow_agent","phaseIndex":2,"startedAt":4500,"durationMs":1000}]});
         let r = PastRun::from_json(&v).unwrap();
         assert_eq!(r.spans, vec![Some((0, 3000)), Some((3000, 8000))]);
-        assert_eq!(r.agents, 3);
     }
 }
