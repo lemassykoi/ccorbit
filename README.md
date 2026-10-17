@@ -6,8 +6,8 @@ live tree per session, a 3D hologram you can turn with the mouse, and a city of 
 worked on.
 
 It is a single Rust binary of about 1.2 MB. It only reads the files Claude Code already writes: it
-never writes, never runs a command and never opens a network connection. It uses about 2% CPU and
-9 to 13 MB of memory.
+never writes, never runs a command and never opens a network connection. It uses 2 to 3% CPU and
+9 to 13 MB of memory, the 3D hologram included.
 
 ```
 ▐ ◆ CCORBIT ▌ ● LIVE  3 sessions · 2 busy · 4 agents running   ⇡ 1.4M/m ⇣ 6.8k/m ≈$44/h
