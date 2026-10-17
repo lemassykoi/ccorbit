@@ -15,7 +15,7 @@ step "lints"
 cargo clippy --all-targets --locked -- -D warnings || fail "Clippy found problems above. Fix them; allow one only with a comment saying why."
 
 step "tests (a debug build, so an arithmetic overflow fails too)"
-cargo test --locked || fail "A test failed: its message above says what and how to fix it."
+cargo test --locked --no-fail-fast || fail "A test failed: its message above says what and how to fix it."
 
 step "release build"
 cargo build --release --locked
