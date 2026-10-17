@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-17
 
 - **Jump to a session** (`--allow-jump`, then `o`): brings forward the terminal tab where the
   pointed session runs. In Warp the exact tab (its focus link); elsewhere on macOS the terminal
@@ -15,7 +15,7 @@
   everywhere; Windows Terminal gets 24-bit color. Tested by CI, not yet against real sessions.
 - Hidden `--jump-check` and `--bench-hud` options for diagnostics.
 
-## 0.1.0 (2026-10-17)
+## 0.1.0 - 2026-10-17
 
 First release.
 
