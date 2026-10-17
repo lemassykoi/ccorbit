@@ -882,18 +882,6 @@ impl HudState {
         HudAction::None
     }
 
-    /// Something on the graph moves beyond the slow decorations: packets, a ping wave, sparks,
-    /// the camera still gliding, the view folding, moons orbiting, or the director at work.
-    pub fn moving(&self) -> bool {
-        let glide = (self.goal_zoom - self.zoom).abs() > 0.002
-            || (self.goal_pan.0 - self.pan.0).abs() > 0.05
-            || (self.goal_pan.1 - self.pan.1).abs() > 0.05
-            || (self.goal_yaw - self.yaw).abs() > 0.002
-            || (self.goal_pitch - self.pitch).abs() > 0.002
-            || (self.goal_depth - self.depth).abs() > 0.002;
-        !self.packets.is_empty() || !self.waves.is_empty() || !self.sparks.is_empty() || glide || self.director.on
-    }
-
     pub fn has_target(&self) -> bool {
         self.selected.is_some()
     }

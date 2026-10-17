@@ -127,6 +127,8 @@ Below the cards:
   - wheel to zoom around the pointer;
   - click to lock a target, which dims what it is not linked to and opens a panel with its details;
   - double-click to open a session, or to fly to any other node.
+- **Frame rate:** 30 frames per second, sharp at any size, for about 3% CPU; `--fps 60` for
+  smoother still.
 - **`v`** folds the view flat (seen from above) and back.
 - **`d`** starts the director: the camera runs itself like a live broadcast.
   - It flies to whatever just happened (a session waiting for you, a collision, a failure, a slow
@@ -205,6 +207,7 @@ Without the option, `o` only says how to turn it on.
 |---|---|
 | `--hud` | Start on the hologram |
 | `--demo` | Show made-up sessions instead of yours: to try it, or to record it without showing your work |
+| `--fps <N>` | Frames per second of the hologram, default 30 (60 costs about 5% CPU) |
 | `--allow-jump` | Let `o` bring forward the terminal tab of a session (runs `open`; see [Jump to a session](#jump-to-a-session)) |
 | `--director` | Start on the hologram with the director at the camera |
 | `--replay <FILE>` | Play back a recorded transcript (`~/.claude/projects/<project>/<session>.jsonl`) |

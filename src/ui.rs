@@ -92,6 +92,8 @@ struct App {
     toasts_ready: bool,
     /// `o` may bring a session's terminal tab forward (`--allow-jump`).
     allow_jump: bool,
+    /// Frames per second of the hologram.
+    fps: u32,
     /// Warnings and collisions already announced, and compactions counted, per session.
     warned: HashSet<String>,
     compacted: HashMap<String, usize>,
@@ -142,6 +144,7 @@ impl App {
             waiting: HashSet::new(),
             toasts_ready: false,
             allow_jump: opts.allow_jump,
+            fps: opts.fps,
             warned: HashSet::new(),
             compacted: HashMap::new(),
         }
@@ -245,14 +248,9 @@ pub fn run(term: &mut DefaultTerminal, mut world: World, opts: &Opts) -> io::Res
         let every = Duration::from_millis(if app.boot {
             30
         } else if app.view == View::Hud {
-            // About 12 frames per second while something moves, 5 when the graph is calm.
-            if !app.fx {
-                250
-            } else if app.hud.moving() || world.animating() {
-                80
-            } else {
-                200
-            }
+            // The sweep and the rings always turn: the hologram keeps its frame rate (30 by
+            // default, `--fps`), and drops to 4 a second with effects off.
+            if app.fx { 1000 / app.fps.max(1) as u64 } else { 250 }
         } else if world.animating() || !app.toasts.is_empty() {
             90
         } else {
@@ -2361,6 +2359,29 @@ fn css(c: Color, default: (u8, u8, u8)) -> String {
         Color::White => BASE[15],
     };
     format!("#{r:02x}{g:02x}{b:02x}")
+}
+
+/// Draws `n` frames of the hologram off screen and reports the time each took, to check the
+/// frame budget (33 ms at 30 frames per second).
+pub fn bench_hud(world: &mut World, opts: &Opts, w: u16, h: u16, n: usize) -> io::Result<String> {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    let mut app = App::new(opts, false);
+    let mut term = Terminal::new(TestBackend::new(w, h))?;
+    app.boot = false;
+    app.view = View::Hud;
+    let mut times = Vec::with_capacity(n);
+    for k in 0..n {
+        if k % 8 == 0 {
+            world.tick();
+        }
+        let start = Instant::now();
+        term.draw(|f| draw(f, &mut app, world))?;
+        times.push(start.elapsed().as_secs_f64() * 1000.0);
+    }
+    times.sort_by(f64::total_cmp);
+    let avg = times.iter().sum::<f64>() / n as f64;
+    Ok(format!("{n} frames at {w}x{h}: average {avg:.2} ms, median {:.2} ms, slowest {:.2} ms", times[n / 2], times[n - 1]))
 }
 
 /// One frame of the wall and of the first session, drawn off screen and printed as text.

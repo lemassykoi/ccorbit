@@ -34,6 +34,7 @@ OPTIONS:
     --director           Start on the HUD with the director at the camera
     --demo               Show made-up sessions instead of yours (to try it, or record it)
     --allow-jump         Let `o` bring forward the terminal tab of a session (runs `open`)
+    --fps <N>            Frames per second of the HUD (default 30)
     --no-boot            Skip the boot animation
     --dump               Print the current state as plain text and exit
     -h, --help           Show this help
@@ -55,6 +56,7 @@ pub struct Opts {
     pub director: bool,
     pub demo: bool,
     pub allow_jump: bool,
+    pub fps: u32,
     pub snapshot_html: Option<(u16, u16, PathBuf)>,
 }
 
@@ -63,7 +65,7 @@ fn parse_args() -> Result<Opts, String> {
         Some(d) => PathBuf::from(d),
         None => PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?).join(".claude"),
     };
-    let mut o = Opts { claude_dir, replay: None, speed: 20.0, theme: 0, boot: true, dump: false, snapshot: None, hud: false, director: false, demo: false, allow_jump: false, snapshot_html: None };
+    let mut o = Opts { claude_dir, replay: None, speed: 20.0, theme: 0, boot: true, dump: false, snapshot: None, hud: false, director: false, demo: false, allow_jump: false, fps: 30, snapshot_html: None };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -93,7 +95,13 @@ fn parse_args() -> Result<Opts, String> {
             "--director" => o.director = true,
             "--demo" => o.demo = true,
             "--allow-jump" => o.allow_jump = true,
+            "--fps" => {
+                o.fps = args.next().and_then(|s| s.parse().ok()).filter(|n: &u32| (1..=120).contains(n)).ok_or("--fps needs a number from 1 to 120")?
+            }
             "--jump-check" => {}
+            "--bench-hud" => {
+                args.next();
+            }
             "--dump" => o.dump = true,
             // Undocumented: prints one frame of each view, for checking the layout without a terminal.
             "--snapshot" => {
@@ -138,6 +146,17 @@ fn main() -> ExitCode {
         if let Err(e) = ui::snapshot_html(&world, &opts, *w, *h, dir) {
             eprintln!("ccorbit: {e}");
             return ExitCode::FAILURE;
+        }
+        return ExitCode::SUCCESS;
+    }
+    // Undocumented: times the drawing of the hologram, to check the frame budget.
+    if let Some(pos) = std::env::args().position(|a| a == "--bench-hud") {
+        let size = std::env::args().nth(pos + 1).unwrap_or_default();
+        let (w, h) = size.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?))).unwrap_or((170, 50));
+        world.run_to_end();
+        match ui::bench_hud(&mut world, &opts, w, h, 300) {
+            Ok(report) => println!("{report}"),
+            Err(e) => eprintln!("ccorbit: {e}"),
         }
         return ExitCode::SUCCESS;
     }
