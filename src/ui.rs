@@ -2281,6 +2281,7 @@ pub fn snapshot_html(world: &World, opts: &Opts, w: u16, h: u16, dir: &std::path
     let mut term = Terminal::new(TestBackend::new(w, h))?;
     app.started = Instant::now().checked_sub(Duration::from_millis(1100)).unwrap_or_else(Instant::now);
     app.hud.settle = true;
+    // harness: allow write (developer snapshot, hidden --snapshot-html)
     std::fs::create_dir_all(dir)?;
     let frames = [
         ("boot", true, View::Wall),
@@ -2321,6 +2322,7 @@ pub fn snapshot_html(world: &World, opts: &Opts, w: u16, h: u16, dir: &std::path
             app.hud.settle = true;
         }
         term.draw(|f| draw(f, &mut app, world))?;
+        // harness: allow write (developer snapshot, hidden --snapshot-html)
         std::fs::write(dir.join(format!("{name}.html")), buffer_html(term.backend().buffer()))?;
     }
     Ok(())

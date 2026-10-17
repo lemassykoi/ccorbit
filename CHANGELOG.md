@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **A harness for working on ccorbit with coding agents:** `AGENTS.md` (the map) and `docs/`
+  (architecture, promises and their checks, transcript format, decisions, visual QA);
+  `scripts/verify.sh` runs formatting, clippy, every test and the footprint budgets, in CI too;
+  golden copies of every screen and of the readings; rule tests that keep the read-only promise,
+  the layering and the docs true.
+- Two busy sessions no longer show the same brainwave.
+
 ## 0.2.0 - 2026-10-17
 
 - **Jump to a session** (`--allow-jump`, then `o`): brings forward the terminal tab where the
