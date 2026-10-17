@@ -2,6 +2,7 @@
 name = "ccorbit"
 version = "0.1.0"
 edition = "2024"
+authors = ["Pierre CANGEMI"]
 description = "A live, read-only terminal view of every Claude Code session on this machine: wall, 3D HUD, code city"
 repository = "https://github.com/pcangemi/ccorbit"
 license = "MIT OR Apache-2.0"
