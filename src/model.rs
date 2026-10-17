@@ -462,6 +462,8 @@ impl Activity {
 
 pub struct Session {
     pub id: String,
+    /// The Claude Code process, from the registry (0 when unknown).
+    pub pid: i64,
     pub name: String,
     pub cwd: String,
     pub status: String,
@@ -517,6 +519,7 @@ impl Session {
     pub fn new(id: &str, dir: PathBuf) -> Session {
         Session {
             id: id.to_string(),
+            pid: 0,
             name: String::new(),
             cwd: String::new(),
             status: String::new(),

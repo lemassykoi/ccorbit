@@ -3,6 +3,7 @@
 mod demo;
 mod hud;
 mod insight;
+mod jump;
 mod model;
 mod parse;
 mod price;
@@ -32,12 +33,14 @@ OPTIONS:
     --hud                Start on the HUD (the live graph) instead of the wall
     --director           Start on the HUD with the director at the camera
     --demo               Show made-up sessions instead of yours (to try it, or record it)
+    --allow-jump         Let `o` bring forward the terminal tab of a session (runs `open`)
     --no-boot            Skip the boot animation
     --dump               Print the current state as plain text and exit
     -h, --help           Show this help
     -V, --version        Show the version
 
-ccorbit only reads files: it never writes, never runs a command and never opens a network connection.
+ccorbit only reads files: it never writes, never runs a command and never opens a network
+connection. The one exception is --allow-jump, which runs `open` when you press `o`.
 ";
 
 pub struct Opts {
@@ -51,6 +54,7 @@ pub struct Opts {
     pub hud: bool,
     pub director: bool,
     pub demo: bool,
+    pub allow_jump: bool,
     pub snapshot_html: Option<(u16, u16, PathBuf)>,
 }
 
@@ -59,7 +63,7 @@ fn parse_args() -> Result<Opts, String> {
         Some(d) => PathBuf::from(d),
         None => PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?).join(".claude"),
     };
-    let mut o = Opts { claude_dir, replay: None, speed: 20.0, theme: 0, boot: true, dump: false, snapshot: None, hud: false, director: false, demo: false, snapshot_html: None };
+    let mut o = Opts { claude_dir, replay: None, speed: 20.0, theme: 0, boot: true, dump: false, snapshot: None, hud: false, director: false, demo: false, allow_jump: false, snapshot_html: None };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -88,6 +92,8 @@ fn parse_args() -> Result<Opts, String> {
             "--hud" => o.hud = true,
             "--director" => o.director = true,
             "--demo" => o.demo = true,
+            "--allow-jump" => o.allow_jump = true,
+            "--jump-check" => {}
             "--dump" => o.dump = true,
             // Undocumented: prints one frame of each view, for checking the layout without a terminal.
             "--snapshot" => {
@@ -138,6 +144,19 @@ fn main() -> ExitCode {
     if let Some((w, h)) = opts.snapshot {
         world.run_to_end();
         print!("{}", ui::snapshot(&world, &opts, w, h));
+        return ExitCode::SUCCESS;
+    }
+    // Undocumented: says how `o` would reach each running session, without doing it.
+    if std::env::args().any(|a| a == "--jump-check") {
+        world.run_to_end();
+        for s in world.sessions.iter().filter(|s| s.alive) {
+            let how = match jump::target(s.pid) {
+                Ok(jump::Target::Tab(url)) => format!("its exact Warp tab ({}…)", &url[..url.len().min(24)]),
+                Ok(jump::Target::App(app)) => format!("its terminal app only ({app})"),
+                Err(why) => why.to_string(),
+            };
+            println!("{} (pid {}): {how}", s.project(), s.pid);
+        }
         return ExitCode::SUCCESS;
     }
     if opts.dump {

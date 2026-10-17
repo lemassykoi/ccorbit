@@ -10,7 +10,8 @@ live tree per session, a 3D hologram you can turn with the mouse, and a city of 
 worked on.
 
 It is a single Rust binary of about 1.2 MB. It only reads the files Claude Code already writes: it
-never writes, never runs a command and never opens a network connection. It uses 2 to 3% CPU and
+never writes, never runs a command and never opens a network connection (the one opt-in exception
+is [jumping to a session's tab](#jump-to-a-session)). It uses 2 to 3% CPU and
 9 to 13 MB of memory, the 3D hologram included.
 
 ![ccorbit in demo mode: the wall of sessions, a session's vitals, the 3D hologram, the director and the code city](docs/demo.gif)
@@ -147,6 +148,24 @@ Below the cards:
 - **Keys:** `[` and `]` change the time window (hour, 6 hours, 24 hours, everything loaded), and
   Enter opens the session that touched the selected file last.
 
+### Jump to a session
+
+Start ccorbit with `--allow-jump`, point at a session (a card on the wall, the open session, a
+locked target in the hologram, a building in the city) and press `o`: the terminal tab where that
+session runs comes to the front.
+
+- **Warp:** ccorbit brings forward the exact tab. Warp gives every tab a focus link, and the
+  session's process inherits it in its environment as `WARP_FOCUS_URL`.
+- **Other macOS terminals:** ccorbit brings the terminal app forward, not the exact tab.
+
+This is off by default because it is the one thing that goes beyond reading files:
+
+- ccorbit reads the environment of that session's own process, keeps only `WARP_FOCUS_URL` and
+  `__CFBundleIdentifier`, and never stores or shows them;
+- it runs `/usr/bin/open` with the link, without a shell.
+
+Without the option, `o` only says how to turn it on.
+
 **Help (`?`)** lists every key, glyph and color. **Toasts** in the bottom right announce:
 
 - an agent or workflow finished, with the race result;
@@ -173,7 +192,7 @@ Below the cards:
 
 | Where | Keys |
 |---|---|
-| Everywhere | `?` help · `g` HUD · `c` code city · `t` theme · `x` effects on or off · `m` mouse capture off (to select text) · `q` quit |
+| Everywhere | `?` help · `g` HUD · `c` code city · `o` jump to the session's tab (with `--allow-jump`) · `t` theme · `x` effects on or off · `m` mouse capture off (to select text) · `q` quit |
 | Wall | arrows or `hjkl` select · Enter open · mouse: click selects, click again opens, wheel moves |
 | Session | arrows or `jk` move · Enter fold · `e` expand all · `f` follow the newest step · `Tab` next session · `Esc` back |
 | HUD | `Tab` or arrows cycle targets · Enter open · `f` fly to the target · `+` `-` zoom · `0` reset the view · `v` flat or 3D · `d` director · space ping · `Esc` drop the target, then back |
@@ -186,6 +205,7 @@ Below the cards:
 |---|---|
 | `--hud` | Start on the hologram |
 | `--demo` | Show made-up sessions instead of yours: to try it, or to record it without showing your work |
+| `--allow-jump` | Let `o` bring forward the terminal tab of a session (runs `open`; see [Jump to a session](#jump-to-a-session)) |
 | `--director` | Start on the hologram with the director at the camera |
 | `--replay <FILE>` | Play back a recorded transcript (`~/.claude/projects/<project>/<session>.jsonl`) |
 | `--speed <N>` | Replay speed, default 20 (idle stretches are skipped) |
@@ -197,7 +217,7 @@ Below the cards:
 ## What it reads
 
 Only files Claude Code already writes, under `~/.claude`. No hook, no settings change, no command,
-no network.
+no network. The exception, off by default, is `--allow-jump` (see above).
 
 | Path | Used for |
 |---|---|
@@ -243,6 +263,7 @@ cargo run --release -- --dump  # check the readings against your own sessions
 | `src/hud.rs` | The hologram: layout, camera, animation, packets, hit tests, target panel |
 | `src/hud/director.rs` | The director |
 | `src/demo.rs` | The made-up sessions of `--demo`, written as transcript records |
+| `src/jump.rs` | Jumping to a session's terminal tab (opt-in) |
 | `src/theme.rs` | Palettes, gradients, fog and the 256-color fallback |
 
 `docs/demo.tape` records `docs/demo.gif` with [vhs](https://github.com/charmbracelet/vhs). Releases

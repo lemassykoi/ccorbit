@@ -90,6 +90,8 @@ struct App {
     toast_seen: HashMap<String, i64>,
     waiting: HashSet<String>,
     toasts_ready: bool,
+    /// `o` may bring a session's terminal tab forward (`--allow-jump`).
+    allow_jump: bool,
     /// Warnings and collisions already announced, and compactions counted, per session.
     warned: HashSet<String>,
     compacted: HashMap<String, usize>,
@@ -139,6 +141,7 @@ impl App {
             toast_seen: HashMap::new(),
             waiting: HashSet::new(),
             toasts_ready: false,
+            allow_jump: opts.allow_jump,
             warned: HashSet::new(),
             compacted: HashMap::new(),
         }
@@ -462,6 +465,7 @@ fn help(f: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![head("MOVE"), k("←↑↓→"), d(" or "), k("hjkl"), d(" select   "), k("tab"), d(" next session or target   "), k("⏎"), d(" open or fold")]),
         Line::from(vec![head(""), k("e"), d(" expand all   "), k("f"), d(" follow newest, or fly to target   "), k("0"), d(" reset the HUD view")]),
         Line::from(vec![head("LOOK"), k("t"), d(" theme   "), k("x"), d(" effects   "), k("m"), d(" mouse off, to select text   "), k("q"), d(" quit")]),
+        Line::from(vec![head("JUMP"), k("o"), d(" bring the session's terminal tab forward (start with --allow-jump)")]),
         Line::from(vec![head("MOUSE"), d("click selects · click again opens · wheel scrolls or zooms · drag pans")]),
         Line::from(vec![head("HUD"), k("drag"), d(" turn   "), k("v"), d(" flat or 3D   "), k("d"), d(" director (the camera runs itself)   "), k("space"), d(" ping")]),
         Line::from(vec![head("CITY"), k("[ ]"), d(" time window   "), k("⏎"), d(" open the session that touched the file last")]),
@@ -1932,6 +1936,10 @@ fn on_key(app: &mut App, world: &mut World, k: KeyEvent) {
             let mut out = io::stdout();
             let _ = if app.mouse { execute!(out, EnableMouseCapture) } else { execute!(out, DisableMouseCapture) };
         }
+        KeyCode::Char('o') => {
+            let si = pointed_session(app, world);
+            jump_to(app, world, si);
+        }
         KeyCode::Char('g') if app.view != View::Hud => app.view = View::Hud,
         KeyCode::Char('c') if !matches!(app.view, View::City) => app.view = View::City,
         _ => match app.view {
@@ -1955,6 +1963,40 @@ fn hud_key(app: &mut App, world: &World, k: KeyEvent) {
             }
         }
     }
+}
+
+/// The session the current view points at: the selected card, the open session, the locked
+/// target in the hologram, or the session that last touched the selected building.
+fn pointed_session(app: &App, world: &World) -> Option<usize> {
+    let order = order(world);
+    match app.view {
+        View::Wall => order.get(app.pick).copied(),
+        View::Session => current_session(app, world, &order),
+        View::Hud => app.hud.target_session(),
+        View::City => app.city.sel.as_ref().and_then(|p| app.city.owner.get(p)).copied(),
+    }
+}
+
+/// Brings the session's terminal tab forward, when allowed; says what happened either way.
+fn jump_to(app: &mut App, world: &World, si: Option<usize>) {
+    let t = app.t();
+    let order = order(world);
+    let (icon, text, color) = match si.map(|si| (si, &world.sessions[si])) {
+        None => ("○", "select a session first".to_string(), t.dim),
+        Some(_) if !app.allow_jump => ("○", "jumping is off · start ccorbit with --allow-jump".to_string(), t.dim),
+        Some((si, s)) => {
+            let name = names(world, &order).get(&si).cloned().unwrap_or_default();
+            if !s.alive || s.pid <= 0 {
+                ("○", format!("{name} is not running on this machine"), t.dim)
+            } else {
+                match crate::jump::jump(s.pid) {
+                    Ok(what) => ("↗", format!("{name} · {what}"), t.ok),
+                    Err(why) => ("✗", format!("{name} · {why}"), t.err),
+                }
+            }
+        }
+    };
+    app.toasts.push(Toast { born: Instant::now(), icon, text, color });
 }
 
 fn city_key(app: &mut App, world: &World, k: KeyEvent) {

@@ -283,6 +283,7 @@ fn scan_registry(live: &mut Live, sessions: &mut Vec<Session>) -> bool {
             changed = true;
         }
         let s = &mut sessions[i];
+        s.pid = pid;
         let (name, status) = (str_of(&v, "name"), str_of(&v, "status"));
         if !s.alive || s.name != name || s.status != status {
             s.alive = true;
