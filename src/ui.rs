@@ -106,6 +106,26 @@ struct Toast {
     icon: &'static str,
     text: String,
     color: Color,
+    /// The same notice again shows once, with a count.
+    count: u32,
+}
+
+impl Toast {
+    fn new(icon: &'static str, text: String, color: Color) -> Toast {
+        Toast { born: Instant::now(), icon, text, color, count: 1 }
+    }
+}
+
+/// Adds a notice, or counts it on the same one already on screen, which stays without sliding in
+/// again.
+fn push_toast(toasts: &mut Vec<Toast>, toast: Toast) {
+    match toasts.iter_mut().find(|t| t.text == toast.text && t.icon == toast.icon) {
+        Some(same) => {
+            same.count += 1;
+            same.born = Instant::now().checked_sub(Duration::from_millis(300)).unwrap_or(same.born);
+        }
+        None => toasts.push(toast),
+    }
 }
 
 impl App {
@@ -350,16 +370,19 @@ fn collect_toasts(app: &mut App, world: &World) -> bool {
             Some(&at) => at,
             None => {
                 if ready && s.alive {
-                    fresh.push(Toast { born: Instant::now(), icon: "+", text: format!("{name} started"), color: t.session(identity(&order, si)) });
+                    fresh.push(Toast::new("+", format!("{name} started"), t.session(identity(&order, si))));
                 }
                 latest
             }
         };
         for it in s.feed.iter().filter(|it| it.at > seen) {
             match (it.feed, it.kind) {
-                (Feed::Failed, _) => fresh.push(Toast { born: Instant::now(), icon: "✗", text: format!("{} failed · {name}", it.label), color: t.err }),
+                // A shell command that fails is everyday business (a grep with no match, a test
+                // run): the feed shows it; repeated failures raise their own warning.
+                (Feed::Failed, Some(Kind::Shell)) => {}
+                (Feed::Failed, _) => fresh.push(Toast::new("✗", format!("{} failed · {name}", it.label), t.err)),
                 (Feed::Done, Some(Kind::Agent)) => {
-                    fresh.push(Toast { born: Instant::now(), icon: "◆", text: format!("agent done · {} · {name}", clip(&it.text, 28)), color: t.agent })
+                    fresh.push(Toast::new("◆", format!("agent done · {} · {name}", clip(&it.text, 28)), t.agent))
                 }
                 (Feed::Done, Some(Kind::Workflow)) => {
                     let race = it
@@ -371,7 +394,7 @@ fn collect_toasts(app: &mut App, world: &World) -> bool {
                         .filter(|r| r.finished)
                         .map(|r| format!(" · {}", vitals::race_chip(&r).trim_start_matches("△ ")))
                         .unwrap_or_default();
-                    fresh.push(Toast { born: Instant::now(), icon: "△", text: format!("workflow done · {}{race} · {name}", clip(&it.text, 24)), color: t.workflow })
+                    fresh.push(Toast::new("△", format!("workflow done · {}{race} · {name}", clip(&it.text, 24)), t.workflow))
                 }
                 _ => {}
             }
@@ -381,11 +404,11 @@ fn collect_toasts(app: &mut App, world: &World) -> bool {
         let before = app.compacted.insert(s.id.clone(), n);
         if ready && before.is_some_and(|b| n > b) {
             let pre = s.compactions.last().map_or(0, |c| c.pre);
-            fresh.push(Toast { born: Instant::now(), icon: "⟳", text: format!("{name} compacted at {} tokens", fmt_n(pre)), color: t.accent });
+            fresh.push(Toast::new("⟳", format!("{name} compacted at {} tokens", fmt_n(pre)), t.accent));
         }
         let needs = s.needs_you();
         if needs && app.waiting.insert(s.id.clone()) && ready {
-            fresh.push(Toast { born: Instant::now(), icon: "⚑", text: format!("{name} needs you"), color: t.warn });
+            fresh.push(Toast::new("⚑", format!("{name} needs you"), t.warn));
         } else if !needs {
             app.waiting.remove(&s.id);
         }
@@ -396,7 +419,7 @@ fn collect_toasts(app: &mut App, world: &World) -> bool {
         let key = format!("{}:{}:{:?}", world.sessions[a.si].id, a.tool, std::mem::discriminant(&a.warn));
         if app.warned.insert(key.clone()) && ready {
             let name = names.get(&a.si).cloned().unwrap_or_default();
-            fresh.push(Toast { born: Instant::now(), icon: "⚠", text: format!("{} · {name}", a.short()), color: t.warn });
+            fresh.push(Toast::new("⚠", format!("{} · {name}", a.short()), t.warn));
         }
         live.insert(key);
     }
@@ -405,14 +428,16 @@ fn collect_toasts(app: &mut App, world: &World) -> bool {
         if app.warned.insert(key.clone()) && ready {
             let who: Vec<String> = c.sessions().iter().map(|si| names.get(si).cloned().unwrap_or_default()).collect();
             let file = c.path.rsplit('/').next().unwrap_or(&c.path).to_string();
-            fresh.push(Toast { born: Instant::now(), icon: "✖", text: format!("collision · {file} · {}", who.join(" + ")), color: t.err });
+            fresh.push(Toast::new("✖", format!("collision · {file} · {}", who.join(" + ")), t.err));
         }
         live.insert(key);
     }
     app.warned.retain(|k| live.contains(k));
     app.toasts_ready = true;
     let changed = !fresh.is_empty();
-    app.toasts.extend(fresh);
+    for toast in fresh {
+        push_toast(&mut app.toasts, toast);
+    }
     let extra = app.toasts.len().saturating_sub(4);
     app.toasts.drain(..extra);
     changed
@@ -427,12 +452,14 @@ fn toasts(f: &mut Frame, area: Rect, app: &App) {
         let slide = ((0.25 - age).max(0.0) / 0.25 * w as f64) as u16;
         // Stacked upward from the bottom right, over the oldest information on screen.
         let Some(y) = area.bottom().checked_sub(2 + k as u16).filter(|&y| y > area.y) else { break };
+        // The whole notice slides; the screen's edge cuts what is not in yet.
         let x = area.right().saturating_sub(w + 2) + slide;
-        let rect = Rect::new(x, y, w.saturating_sub(slide), 1).intersection(area);
+        let rect = Rect::new(x, y, w, 1).intersection(area);
         if rect.is_empty() {
             continue;
         }
         let old = age > 4.2;
+        let count = if toast.count > 1 { vec![Span::styled(format!(" ×{} ", toast.count), Style::new().fg(toast.color).add_modifier(Modifier::BOLD))] } else { vec![] };
         let line = fit(
             vec![
                 Span::styled("▌", Style::new().fg(toast.color)),
@@ -440,8 +467,8 @@ fn toasts(f: &mut Frame, area: Rect, app: &App) {
             ],
             toast.text.clone(),
             Style::new().fg(if old { t.dim } else { t.hi }),
-            vec![],
-            rect.width as usize,
+            count,
+            w as usize,
         );
         f.render_widget(Paragraph::new(line).style(Style::new().bg(t.surface)), rect);
     }
@@ -1994,7 +2021,7 @@ fn jump_to(app: &mut App, world: &World, si: Option<usize>) {
             }
         }
     };
-    app.toasts.push(Toast { born: Instant::now(), icon, text, color });
+    push_toast(&mut app.toasts, Toast::new(icon, text, color));
 }
 
 fn city_key(app: &mut App, world: &World, k: KeyEvent) {
@@ -2257,7 +2284,7 @@ pub fn snapshot_html(world: &World, opts: &Opts, w: u16, h: u16, dir: &std::path
             // A sample notice, to check its look; it only exists in these screenshots.
             let t = app.t();
             let born = Instant::now().checked_sub(Duration::from_secs(1)).unwrap_or_else(Instant::now);
-            app.toasts = vec![Toast { born, icon: "◆", text: "agent done · Audit the test suite · api".into(), color: t.agent }];
+            app.toasts = vec![Toast { born, icon: "◆", text: "agent done · Audit the test suite · api".into(), color: t.agent, count: 1 }];
         } else {
             app.toasts.clear();
         }
@@ -2493,4 +2520,21 @@ pub fn dump(world: &mut World) -> String {
     }
     let _ = writeln!(out, "{} past workflow runs on record", world.history.len());
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_same_notice_twice_shows_once_with_a_count() {
+        let mut toasts = Vec::new();
+        for _ in 0..4 {
+            push_toast(&mut toasts, Toast::new("⚠", "Bash failing ×3 · api".into(), Color::Yellow));
+        }
+        push_toast(&mut toasts, Toast::new("◆", "agent done · Audit · api".into(), Color::Magenta));
+        assert_eq!(toasts.len(), 2);
+        assert_eq!(toasts[0].count, 4);
+        assert!(toasts[0].born.elapsed() >= Duration::from_millis(250), "a counted notice does not slide in again");
+    }
 }

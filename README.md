@@ -168,10 +168,12 @@ This is off by default because it is the one thing that goes beyond reading file
 
 Without the option, `o` only says how to turn it on.
 
-**Help (`?`)** lists every key, glyph and color. **Toasts** in the bottom right announce:
+**Help (`?`)** lists every key, glyph and color. **Toasts** in the bottom right (the same one
+again shows once, with a count) announce:
 
 - an agent or workflow finished, with the race result;
-- a failure;
+- a failed step (not shell commands: they fail too often to be news; the feed shows them, and
+  repeated failures raise a warning);
 - a session that needs you;
 - a compaction;
 - a slow or looping call;
