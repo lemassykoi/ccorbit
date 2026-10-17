@@ -1,0 +1,36 @@
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h
+╭ ◢ CODE CITY · 17 files, 16 changed · last 24 hours anged · [ ] window ╮ ╭ ◢ LOT ────────────────────────────────────╮
+│  src/components/CartSummary.tsx edited 2.9s ago · +29 −8 · webapp·12  │▌│src/components/CartSummary.tsx             │▌
+│                                                                       │▌│last     now · webapp·12 · review:security │▌
+│                                                                       │▌│changed  1× · +29 −8 lines                 │▌
+│                                                                       │▌│read     1× · 4m56s ago                    │▌
+│                                                                       │▌│by       webapp·12                         │▌
+│                                                                       │▌│⏎ opens the session that touched it last   │▌
+│                                                        ▄▄▄            │▌│                                           │▌
+│            ▼                                           ▪              │▌╰───────────────────────────────────────────╯▌
+│                ▄▄▄                                     ▪              │▌ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+│                ▪ ◆▄▄▄                                  ▪              │▌╭ ✖ COLLISIONS ─────────────────────────────╮
+│           ▄▄▄  ▪  ▪                                ▄▄▄ ▪              │▌│checkout.tsx webapp·12 + webapp·47         │▌
+│           ▪    ▪▄▄▄  ▄▄          ▄▄▄               ▪   ▪              │▌╰───────────────────────────────────────────╯▌
+│           ▪▄▄▄  ▪                ▪                 ▪   ▪              │▌ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+│            ▪    ▪                ▪  ▄▄             ▪   ▪              │▌╭ ▲ MOST CHANGED ───────────────────────────╮
+│            ▪  ▄ ▪              ▄▄▄    ▄▄▄          ▪  ▄▄              │▌│▇▇▇▇▇▇ rank.ts                     +117 −42│▌
+│       ▄▄▄  ▪    ▪              ▪      ▪            ▪                  │▌│▇▇▇▇▇▇ search.md                   +103 −31│▌
+│       ▪    ▪    ▪              ▪    ▄▄▄            ▪                  │▌│▇▇▇▇▇  checkout.css                 +95 −19│▌
+│       ▪    ▪    ▪              ▪    ▪              ▪                  │▌│▇▇▇▇▇  checkout.tsx                 +83 −25│▌
+│       ▪    ▪    ▪              ▪    ▪              ▪                  │▌│▇▇▇▇   PaymentForm.tsx              +64 −21│▌
+│       ▪    ▪    ▪              ▪    ▪              ▪                  │▌│▇▇▇▇   pricing.ts                   +63 −21│▌
+│       ▪    ▪    ▪              ▪    ▪              ▪                  │▌│▇▇▇    redis.go                     +34 −25│▌
+│       ▪    ▪    ▪              ▪    ▪              ▪                  │▌│▇▇     main.go                      +25 −14│▌
+│       ▪    ▪    ▪              ▪    ▪              ▪                  │▌│▇▇     CartSummary.tsx               +29 −8│▌
+│       ▪    ▪    ▪     ▀░       ▪    ▪              ▪     ▀░           │▌│▇▇     cache.ts                      +30 −1│▌
+│       ▪  ▄ ▪    ▪              ▪    ▪              ▪                  │▌│▇▇     vite.config.ts               +21 −10│▌
+│       ▪    ▪    ▪   ▀░         ▪    ▪   ▀░         ▪   ▀░             │▌│▇      tenant.go                    +10 −14│▌
+│       ▪    ▪    ▪              ▪    ▪              ▪                  │▌│▇      index.ts                      +15 −9│▌
+│         ▀░   ▀░   ▀░             ▀░   ▀░             ▀░               │▌│▇      token_bucket.go               +9 −12│▌
+│      ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔    ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔    ▔▔▔▔▔▔▔▔▔▔▔         │▌│▇      coupons.ts                    +6 −14│▌
+│             webapp                  api            docs-site          │▌│▇      limiter_test.go               +12 −2│▌
+│             9 files               5 files           3 files           │▌│                                           │▌
+╰───────────────────────────────────────────────────────────────────────╯▌╰───────────────────────────────────────────╯▌
+ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+ ←↑↓→  move   ⏎  open session   [ ]  window   g  hud   esc  wall   q  quit                            ?  help  phosphor

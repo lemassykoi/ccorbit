@@ -190,9 +190,7 @@ impl Director {
             Span::raw("  "),
             Span::styled(clip(&shot.title, w.saturating_sub(40) as usize), Style::new().fg(shot.color).add_modifier(Modifier::BOLD)),
         ]);
-        let row2 = Line::from(vec![
-            Span::styled(format!("  {}", clip(&shot.sub, w.saturating_sub(36) as usize)), Style::new().fg(t.fg)),
-        ]);
+        let row2 = Line::from(vec![Span::styled(format!("  {}", clip(&shot.sub, w.saturating_sub(36) as usize)), Style::new().fg(t.fg))]);
         let style = Style::new().bg(t.surface);
         f.render_widget(Paragraph::new(vec![row1, row2]).style(style), bar);
         let right = Line::from(vec![
@@ -219,14 +217,12 @@ impl Director {
         f.render_widget(Clear, rect);
         let k = order.iter().position(|&i| i == si).unwrap_or(0);
         let name = names.get(&si).cloned().unwrap_or_else(|| s.project().to_string());
-        let block = Block::bordered()
-            .border_type(BorderType::Rounded)
-            .border_style(Style::new().fg(t.session(k)))
-            .style(Style::new().bg(t.surface))
-            .title_top(Line::from(vec![
+        let block = Block::bordered().border_type(BorderType::Rounded).border_style(Style::new().fg(t.session(k))).style(Style::new().bg(t.surface)).title_top(
+            Line::from(vec![
                 Span::styled(" ◢ BUSIEST ", Style::new().fg(t.dim).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("{name} "), Style::new().fg(t.session(k)).add_modifier(Modifier::BOLD)),
-            ]));
+            ]),
+        );
         let inner = block.inner(rect);
         f.render_widget(block, rect);
         let now = world.now;

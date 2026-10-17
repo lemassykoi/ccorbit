@@ -1,0 +1,50 @@
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h                 activity ▄▄▄·▅▅▇▇█·▅▇▇▇▇▅▄▅▇▅▂▅▄·
+┏━━                                                                                                                                                                    ━━┓
+┃ ◤ SYSTEM ACTIVE                                                                                                                                                        ┃
+  sessions 4 live · 3 busy
+  agents   3 running
+  uplink   ⇡ 12M/m                                                      ⢀           ⢸           ⢀
+  downlink ⇣ 31k/m                                          ⠠⡀      ⢀ ⢀ ⠈⠄ ⠄ ⠄ ⠂ ⠂ ⠂ ⠂ ⠐ ⠐ ⠠ ⠠ ⠠⠈⢀ ⢀        ⡠
+  burn     ≈$343/h API-equiv.                   ⠠⣀         ⡀ ⠅⠐ ⠐ ⠈                                  ⠈ ⠈ ⠐ ⠠⠁⢀ ⢀       ⢀⡠
+  view     flat · 1.0×                           ⠈⠒⢀ ⠄ ⠂ ⠁                                                       ⠈ ⠂ ⡀⠐⠊
+                                              ⡀ ⠂⠈                                                                     ⠁⠐ ⠠
+                                       ⠈⠓⡀ ⠂⠈                                    ⡀      ⡀                                   ⠁⠐ ⠄⠐⠋ ⣀⡀
+                                    ⠠⣴⡄⠈                                        ⢴⢙⠆    ⢞⢱⠄                                       ⠁⡾⡭⡽⣧
+                               ⠢⠄ ⡀⠐⠈⠘⠁                                          ⠁⡀    ⡀⠁                                   ⢀ ⠤ ⠒⠁⠫⠾⠿⠏⠠  ⠤⠂
+                              webapp-testing                                                                           ⢀⠤⠐⠒ ⠁   linear  ⠁⠠
+                      ⢀      ⠄⠁                                                    ⣀⠤⢄⡀                          ⡠⠄⠐⠂⠈⠁                   ⠈⠠      ⢀
+                       ⠉⠑⠒⠠ ⠁                                               ⡀ ⢀  ⠠⢸⢱⣿⣷⢹⠄ ⢀  ⢀              ⣀⠄⠐ ⠉                             ⠁⠄⠐⠒⠉⠁
+                         ⠌                                          ⢀ ⠐  ⠈        ⠈⠣⠭⠥⠋        ⠁ ⠐  ⢀⡠ ⠒ ⠉                                     ⠁⠄
+                       ⡀⠁                                      ⠠  ⠁                api        ⢀⡀⠠⠂⠈⠁  ⠈  ⠄                                       ⠡
+                   ⠒⠒⢀⠐                                    ⠠ ⠈                   4.8M/m ⣀ ⠤ ⠊⠁             ⠁ ⠄                                    ⠈⠄⠐⠒⠂
+                    ⢀⠂                                  ⢀ ⠂                      ⢀⡀⠠⠄⠐⠉                       ⠈ ⢀                                   ⢁
+                    ⠄                                  ⠄                   ⢀ ⠤ ⠒⠁   ⠐                            ⠐                                   ⢂
+               ⠠⠤⠄ ⠌                                  ⠂              ⡀⠠⠤ ⠒ ⠁      ⢀ ⡀⡀⢀                            ⠁⡀                                 ⠂ ⠤⠤
+                  ⢈                                 ⡀⠁          ⡠⠄⠐⠂⠈           ⠠⠈  ⢐⠒⠤⣈⠠                            ⠄                                ⠨
+                  ⡂                             ⢀⡀⣀⣀⣐⢤⡀  ⢀⠤ ⠒ ⠉                ⠌⡤⢠⠖⢉⣁⣀ ⢤⠑⡌⠄                        ⣀ ⢀⡀⠲⢄                              ⠅
+             ⣀⣀⣀⡀ ⠂                ⡠⠢⡄ ⡀  ⡀  ⡀  ⡞⡞⢰⣶⡌⢣⢣⡈⢁⣀ ⣀ ⣀⡀⢀⡀⢀⣀ ⣀ ⣀⡀⢀⡀⢀⡀⢀⣀⢈⢰⠁⠃⢸⣷⡿⣷⣿⣀⢇⢹⢈⢀⣀ ⣀ ⣀ ⣀⡀⢀⡀⢀⣀ ⣀ ⣀⡀⢀⡀⢀⣀ ⢠⠃⡎⣵⣮⣱⠈⡆  ⡀  ⡀  ⡀ ⡤⠢⡀                ⡂ ⣀⣀⣀⡀
+                  ⠅                ⠈⠊⠁          ⢣⡳⣘⣛⣡⢎⡞                       ⠠⠸⡄⢀⠸⢟⣿⣟⠿ ⡏⡜⠠                       ⠈⡆⠣⢝⡫⠜⣠⠃          ⠉⠊                 ⠅
+                  ⢁                            docs-site                       ⠡⠑⢌⡳⠤⢄⠤⣆ ⠈⠡⠁                   ⢀⠠ webapp·47                            ⢀⠁
+                  ⠐⡀                            1.7M/m                          ⠈⠠⢈⠑⡒⡀⢀⠠⠈                 ⢀⠠⠔⠈⠁   2.9M/m                              ⡐
+               ⠈⠉⠁ ⠂                                 ⠈⢀                          ◆ CORE ⡆              ⢀⠤⠐⠁       ⢀⠈                                  ⠂ ⠉⠉
+                   ⠈⠄                                  ⠐                        ⇡12M ⇣31k     ✖ checkout.tsx     ⠄                                   ⠌
+                    ⠈⠠                                   ⠁ ⠄                        ⢠⣿⡿⣿⣟⣿⡄     ⡠⠐⠊           ⡀⠐                                   ⠠⠈
+                   ⠒⠒ ⠂⡀                                    ⠐ ⢀                     ⢠⡏⣾⡿⣟⣿⢞⡄⢀⡀⠔⠂          ⡀ ⠂                                     ⡀⠂⠐⠒⠂
+                       ⠐⢀                                        ⠂ ⠄              ⡀ ⢈⠠⢄⣵⡟⡀⠔⠂⠁        ⢀ ⠐                                        ⢀⠐
+                         ⠐⢀                                          ⠈  ⠂ ⠠  ⢀   ⢰⢡⢖⣭⣕⢦⢱⠉⢳⢫⡎⡷⡠  ⠐  ⠁                                          ⢀⠐
+                      ⢀⠤⠔⠒ ⠐⢀                                                   ⠁⢸⠘⣜⠿⢟⡜⢸⢏⡇⡏⡾⡘⡵⡀                                             ⢀⠐ ⠐⠒⠤⢄
+                             ⠐ ⡀                                       ⢀⣀⣀  ⡀⠠⠔ webapp·12 ⠂⢱⢱⡀⣱                                           ⡀⠐
+                                ⠂⠠                                     ⢩⡚⢢⠱⠈ ⢀⣀⢀ 3.2M/m ⠁⢄⡇⡀⢇⢇⢣⢠⡊⡦                                     ⠠ ⠂
+                               ⠊⠁  ⠁⠠⣰⡄                           review:design ⡀  ⡔⣒⡢⣄⡇⡇⠰⢥⠬⡬⡄⢇⢣⠙                                 ⡠⡲⡶⡀⠁  ⠉⠂
+                                code-review                                  ⠉⠊    ⠐⢅⠜⠈⢇⢸⠘⠌⣞⠠⠂⠘⡌⢆⢣                              ⢀ ⠘⠭⠽⠁
+                                       ⠠⠖ ⠈ ⠄⢀                          revi review:securi… nd-fix                         ⢀ ⠄⠈ github
+                                               ⠈ ⠂ ⡀                                  ⡇⢸ ⡇⢹⠈⡆⢣⠘⡄⢣⠘⡌⢢                  ⡀ ⠂⠈
+                                                 ⣠⠒ ⠈ ⠐ ⠠ ⡀                           ⢣⠘⡄⢣⠈⡆⢱⠈⡆⢱⠈⢆⠱⡀⢣          ⡀⠠ ⠐ ⠈ ⠐⢢⡀
+                                                ⠈           ⠁⡄⠁ ⠂ ⠄ ⡀ ⡀               ⢸ ⡇⢸ ⢣⠘⡄⢱⠈⡆⠘⡄⣣ ⡣ ⠄ ⠂ ⠁⡄⠁          ⠈
+                                                            ⠈           ⢡ ⠁ ⠁ ⠈ ⠐ ⠐ ⢐ ⠘ ⠓⠈⠊⠈ ⠁⠈⠁⢨⠁          ⠈
+  ▸   6.4s docs-site    github search_issues · checkout is:open                     ⠸
+  ▸   6.2s webapp       Edit …/lib/pricing.ts
+  ▸   3.2s webapp       Edit …/components/CartSummary.tsx
+┃ ▸   1.9s docs-site    linear get_issue · ENG-412                                         drag pan · wheel zoom · click lock · v 3D · d director · space ping · 0 reset ┃
+┗━━                                                                                                                                                                    ━━┛
+ tab  target   ⏎  open   +-  zoom   v  flat/3D   d  director   0  reset   esc  wall   q  quit                                                           ?  help  phosphor

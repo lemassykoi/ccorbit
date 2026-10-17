@@ -140,6 +140,14 @@ impl Cam {
     }
 }
 
+/// A drag in progress: the button, where it started, the pan and the turn at that moment, and
+/// whether the pointer moved since.
+type Drag = (MouseButton, u16, u16, (f64, f64), (f64, f64), bool);
+
+/// A server or skill shared by sessions: id, kind, label, weight, and each user session with
+/// whether it uses it right now.
+type Shared = (String, NodeKind, String, u32, Vec<(usize, bool)>);
+
 pub struct HudState {
     pos: HashMap<String, P3>,
     born: HashMap<String, Instant>,
@@ -164,8 +172,7 @@ pub struct HudState {
     /// 1 for the 3D view, 0 for the flat one; the fold between them is animated.
     depth: f64,
     goal_depth: f64,
-    /// Button pressed, where, the pan and turn at that moment, and whether it moved.
-    drag: Option<(MouseButton, u16, u16, (f64, f64), (f64, f64), bool)>,
+    drag: Option<Drag>,
     last: Option<Instant>,
     last_input: Instant,
     started: Instant,
@@ -176,6 +183,8 @@ pub struct HudState {
     director: Director,
     /// Place nodes at their targets on the next frame instead of flying them in.
     pub settle: bool,
+    /// A fixed animation time in seconds, for tests.
+    pub frozen: Option<f64>,
 }
 
 impl HudState {
@@ -212,6 +221,7 @@ impl HudState {
             last_click: None,
             director: Director::new(),
             settle: false,
+            frozen: None,
         }
     }
 
@@ -241,9 +251,9 @@ impl HudState {
             return;
         }
         let now = Instant::now();
-        let dt = self.last.map_or(0.0, |l| now.duration_since(l).as_secs_f64()).min(0.25);
+        let dt = if self.frozen.is_some() { 0.0 } else { self.last.map_or(0.0, |l| now.duration_since(l).as_secs_f64()).min(0.25) };
         self.last = Some(now);
-        let time = now.duration_since(self.started).as_secs_f64();
+        let time = self.frozen.unwrap_or_else(|| now.duration_since(self.started).as_secs_f64());
         if !self.director.on && self.last_input.elapsed() > IDLE_DIRECTOR && fx {
             self.director.set(true);
         }
@@ -286,11 +296,7 @@ impl HudState {
         self.packets.retain(|p| now.duration_since(p.born).as_secs_f64() < p.dur);
         self.sparks.retain(|s| now.duration_since(s.born) < Duration::from_millis(1500));
         self.waves.retain(|w| now.duration_since(*w) < Duration::from_millis(1700));
-        self.hits = nodes
-            .iter()
-            .zip(&proj)
-            .map(|(n, &(x, y, _, k))| Hit { id: n.id.clone(), kind: n.kind, session: n.session, x, y, r: n.r * k })
-            .collect();
+        self.hits = nodes.iter().zip(&proj).map(|(n, &(x, y, _, k))| Hit { id: n.id.clone(), kind: n.kind, session: n.session, x, y, r: n.r * k }).collect();
         if self.selected.as_ref().is_some_and(|s| !self.hits.iter().any(|h| &h.id == s)) {
             self.selected = None;
         }
@@ -337,10 +343,7 @@ impl HudState {
                 dots.push(((x, y), fogged(c, d)));
             }
         }
-        let born: Vec<f64> = nodes
-            .iter()
-            .map(|n| self.born.get(&n.id).map_or(1.0, |b| now.duration_since(*b).as_secs_f64() / 0.9))
-            .collect();
+        let born: Vec<f64> = nodes.iter().map(|n| self.born.get(&n.id).map_or(1.0, |b| now.duration_since(*b).as_secs_f64() / 0.9)).collect();
         let sparks: Vec<(usize, f64, String, Color)> = self
             .sparks
             .iter()
@@ -393,188 +396,195 @@ impl HudState {
         by_depth.sort_by(|&a, &b| proj[a].2.total_cmp(&proj[b].2));
         let floor = |r: f64, gap: usize, base: Color| Ring3 { cam, r, y: 0.0, gap, base, bg: t.bg, fade: 0.65 * m, r2 };
 
-        let canvas = Canvas::default()
-            .marker(Marker::Braille)
-            .background_color(t.bg)
-            .x_bounds([x0, x1])
-            .y_bounds([y0, y1])
-            .paint(|ctx| {
-                // The floor: two orbits, compass ticks, a radar sweep, faint spokes in 3D.
-                ctx.draw(&floor(r1, 4, t.faint));
-                ctx.draw(&floor(r2, 3, t.faint));
-                for deg in (0..360).step_by(10) {
-                    let a = (deg as f64).to_radians();
-                    let len = if deg % 30 == 0 { maxr * 0.045 } else { maxr * 0.02 };
-                    let color = if deg % 90 == 0 { t.dim } else { t.faint };
-                    let (p, q) = ((r2 + 2.0) * a.cos(), (r2 + 2.0 + len) * a.cos());
-                    let (pz, qz) = (-(r2 + 2.0) * a.sin(), -(r2 + 2.0 + len) * a.sin());
-                    let d = cam.project((p, 0.0, pz)).2;
-                    ctx.draw(&Seg { a: cam.xy((p, 0.0, pz)), b: cam.xy((q, 0.0, qz)), color: fogged(color, d) });
+        let canvas = Canvas::default().marker(Marker::Braille).background_color(t.bg).x_bounds([x0, x1]).y_bounds([y0, y1]).paint(|ctx| {
+            // The floor: two orbits, compass ticks, a radar sweep, faint spokes in 3D.
+            ctx.draw(&floor(r1, 4, t.faint));
+            ctx.draw(&floor(r2, 3, t.faint));
+            for deg in (0..360).step_by(10) {
+                let a = (deg as f64).to_radians();
+                let len = if deg % 30 == 0 { maxr * 0.045 } else { maxr * 0.02 };
+                let color = if deg % 90 == 0 { t.dim } else { t.faint };
+                let (p, q) = ((r2 + 2.0) * a.cos(), (r2 + 2.0 + len) * a.cos());
+                let (pz, qz) = (-(r2 + 2.0) * a.sin(), -(r2 + 2.0 + len) * a.sin());
+                let d = cam.project((p, 0.0, pz)).2;
+                ctx.draw(&Seg { a: cam.xy((p, 0.0, pz)), b: cam.xy((q, 0.0, qz)), color: fogged(color, d) });
+            }
+            if m > 0.3 {
+                for k in 0..12 {
+                    let a = TAU * k as f64 / 12.0;
+                    let (p, q) = ((r1 * 0.3 * a.cos(), 0.0, -r1 * 0.3 * a.sin()), (r2 * a.cos(), 0.0, -r2 * a.sin()));
+                    let d = cam.project(q).2;
+                    ctx.draw(&Dashed { a: cam.xy(p), b: cam.xy(q), on: 0.6, off: 7.0, phase: 0.0, color: fogged(t.faint, d) });
                 }
-                if m > 0.3 {
-                    for k in 0..12 {
-                        let a = TAU * k as f64 / 12.0;
-                        let (p, q) = ((r1 * 0.3 * a.cos(), 0.0, -r1 * 0.3 * a.sin()), (r2 * a.cos(), 0.0, -r2 * a.sin()));
-                        let d = cam.project(q).2;
-                        ctx.draw(&Dashed { a: cam.xy(p), b: cam.xy(q), on: 0.6, off: 7.0, phase: 0.0, color: fogged(t.faint, d) });
-                    }
-                }
-                if fx {
-                    // On a tilted floor the sweep's trail would close into a solid band: there it is
-                    // a light fan of dotted lines.
-                    let trail = if m > 0.5 { 6 } else { 10 };
-                    for k in 0..trail {
-                        let a = sweep - k as f64 * if m > 0.5 { 0.05 } else { 0.025 };
-                        let tip = (r2 * a.cos(), 0.0, -r2 * a.sin());
-                        let color = fogged(rgb(mix(t.g0, (24, 24, 24), k as f64 / trail as f64)), cam.project(tip).2);
-                        let (from, to) = (cam.xy((0.0, 0.0, 0.0)), cam.xy(tip));
-                        if m > 0.5 && k > 0 {
-                            ctx.draw(&Dashed { a: from, b: to, on: 1.0, off: 2.0 + k as f64, phase: 0.0, color });
-                        } else {
-                            ctx.draw(&Seg { a: from, b: to, color });
-                        }
-                    }
-                }
-                ctx.layer();
-
-                // Stalks under raised nodes, the orbits of working moons, then the links.
-                for (i, n) in nodes.iter().enumerate() {
-                    let p = world_at[i];
-                    if matches!(n.kind, NodeKind::Mcp | NodeKind::Skill) && p.1 > 1.0 {
-                        let d = proj[i].2;
-                        ctx.draw(&Dashed { a: at[i], b: cam.xy((p.0, 0.0, p.2)), on: 0.8, off: 2.2, phase: 0.0, color: fogged(t.faint, d) });
-                    }
-                }
-                for e in &edges {
-                    let (a, b) = (at[e.a], at[e.b]);
-                    let d = (proj[e.a].2 + proj[e.b].2) / 2.0;
-                    if e.alarm.is_some() {
-                        let phase = if fx { -time * 24.0 } else { 0.0 };
-                        ctx.draw(&Dashed { a, b, on: 3.0, off: 1.5, phase, color: if (time * 3.0) as i64 % 2 == 0 { t.err } else { t.warn } });
-                        continue;
-                    }
-                    let pointed = touches(e, sel_ix) || touches(e, hover_ix);
-                    if e.shared && !e.active && !pointed {
-                        continue;
-                    }
-                    let in_focus = lit(e.a) && lit(e.b);
-                    if e.active && in_focus {
-                        let phase = if fx { -time * 18.0 } else { 0.0 };
-                        ctx.draw(&Dashed { a, b, on: 2.5, off: 2.0, phase, color: fogged(e.color, d) });
-                    } else if pointed {
-                        ctx.draw(&Dashed { a, b, on: 1.5, off: 1.5, phase: 0.0, color: e.color });
+            }
+            if fx {
+                // On a tilted floor the sweep's trail would close into a solid band: there it is
+                // a light fan of dotted lines.
+                let trail = if m > 0.5 { 6 } else { 10 };
+                for k in 0..trail {
+                    let a = sweep - k as f64 * if m > 0.5 { 0.05 } else { 0.025 };
+                    let tip = (r2 * a.cos(), 0.0, -r2 * a.sin());
+                    let color = fogged(rgb(mix(t.g0, (24, 24, 24), k as f64 / trail as f64)), cam.project(tip).2);
+                    let (from, to) = (cam.xy((0.0, 0.0, 0.0)), cam.xy(tip));
+                    if m > 0.5 && k > 0 {
+                        ctx.draw(&Dashed { a: from, b: to, on: 1.0, off: 2.0 + k as f64, phase: 0.0, color });
                     } else {
-                        ctx.draw(&Dashed { a, b, on: 1.0, off: 5.0, phase: 0.0, color: fogged(t.faint, d) });
+                        ctx.draw(&Seg { a: from, b: to, color });
                     }
                 }
-                ctx.layer();
+            }
+            ctx.layer();
 
-                for w in &waves {
-                    ctx.draw(&Ring3 { cam, r: (r2 * w).max(1.0), y: 0.0, gap: 1, base: t.grad(*w), bg: t.bg, fade: 0.5 * m, r2 });
+            // Stalks under raised nodes, the orbits of working moons, then the links.
+            for (i, n) in nodes.iter().enumerate() {
+                let p = world_at[i];
+                if matches!(n.kind, NodeKind::Mcp | NodeKind::Skill) && p.1 > 1.0 {
+                    let d = proj[i].2;
+                    ctx.draw(&Dashed { a: at[i], b: cam.xy((p.0, 0.0, p.2)), on: 0.8, off: 2.2, phase: 0.0, color: fogged(t.faint, d) });
                 }
-                for &i in &by_depth {
-                    let n = &nodes[i];
-                    let (x, y, d, k) = proj[i];
-                    let dim = !lit(i);
-                    let color = if dim { t.faint } else { fogged(n.color, d) };
-                    node_shape(ctx, n, (x, y), n.r * k, color, time, born[i], fx, dim, t);
-                    if n.warn.is_some() && !dim {
-                        let on = !fx || (time * 2.5) as i64 % 2 == 0;
-                        ctx.draw(&Ring { c: (x, y), sx: 1.0, r: n.r * k * 2.3, gap: 2, color: if on { t.warn } else { t.err } });
-                    }
+            }
+            for e in &edges {
+                let (a, b) = (at[e.a], at[e.b]);
+                let d = (proj[e.a].2 + proj[e.b].2) / 2.0;
+                if e.alarm.is_some() {
+                    let phase = if fx { -time * 24.0 } else { 0.0 };
+                    ctx.draw(&Dashed { a, b, on: 3.0, off: 1.5, phase, color: if (time * 3.0) as i64 % 2 == 0 { t.err } else { t.warn } });
+                    continue;
                 }
-                for (i, u, _, color) in &sparks {
-                    let r = nodes[*i].r * proj[*i].3;
-                    ctx.draw(&Ring { c: at[*i], sx: 1.0, r: r * (1.4 + 2.2 * u), gap: 2, color: *color });
+                let pointed = touches(e, sel_ix) || touches(e, hover_ix);
+                if e.shared && !e.active && !pointed {
+                    continue;
                 }
-                if let Some(h) = &hover {
-                    ctx.draw(&Ring { c: (h.x, h.y), sx: 1.0, r: h.r * 2.0 + 1.0, gap: 2, color: t.hi });
+                let in_focus = lit(e.a) && lit(e.b);
+                if e.active && in_focus {
+                    let phase = if fx { -time * 18.0 } else { 0.0 };
+                    ctx.draw(&Dashed { a, b, on: 2.5, off: 2.0, phase, color: fogged(e.color, d) });
+                } else if pointed {
+                    ctx.draw(&Dashed { a, b, on: 1.5, off: 1.5, phase: 0.0, color: e.color });
+                } else {
+                    ctx.draw(&Dashed { a, b, on: 1.0, off: 5.0, phase: 0.0, color: fogged(t.faint, d) });
                 }
-                if let Some(h) = &sel {
-                    reticle(ctx, (h.x, h.y), h.r, time, t);
-                    if let Some(end) = leader_end {
-                        let elbow = (end.0 - 6.0 * cw, end.1);
-                        ctx.draw(&Seg { a: polar((h.x, h.y), h.r * 2.6 + 3.0, (elbow.1 - h.y).atan2(elbow.0 - h.x)), b: elbow, color: t.hi });
-                        ctx.draw(&Seg { a: elbow, b: end, color: t.hi });
-                    }
-                }
-                if let Some(m) = mouse {
-                    ctx.draw(&Seg { a: (m.0 - 2.0 * cw, m.1), b: (m.0 + 2.0 * cw, m.1), color: t.dim });
-                    ctx.draw(&Seg { a: (m.0, m.1 - ch), b: (m.0, m.1 + ch), color: t.dim });
-                }
-                ctx.layer();
+            }
+            ctx.layer();
 
-                for (pt, color) in &dots {
-                    ctx.draw(&Points { coords: std::slice::from_ref(pt), color: *color });
+            for w in &waves {
+                ctx.draw(&Ring3 { cam, r: (r2 * w).max(1.0), y: 0.0, gap: 1, base: t.grad(*w), bg: t.bg, fade: 0.5 * m, r2 });
+            }
+            for &i in &by_depth {
+                let n = &nodes[i];
+                let (x, y, d, k) = proj[i];
+                let dim = !lit(i);
+                let color = if dim { t.faint } else { fogged(n.color, d) };
+                node_shape(ctx, n, (x, y), n.r * k, color, time, born[i], fx, dim, t);
+                if n.warn.is_some() && !dim {
+                    let on = !fx || (time * 2.5) as i64 % 2 == 0;
+                    ctx.draw(&Ring { c: (x, y), sx: 1.0, r: n.r * k * 2.3, gap: 2, color: if on { t.warn } else { t.err } });
                 }
+            }
+            for (i, u, _, color) in &sparks {
+                let r = nodes[*i].r * proj[*i].3;
+                ctx.draw(&Ring { c: at[*i], sx: 1.0, r: r * (1.4 + 2.2 * u), gap: 2, color: *color });
+            }
+            if let Some(h) = &hover {
+                ctx.draw(&Ring { c: (h.x, h.y), sx: 1.0, r: h.r * 2.0 + 1.0, gap: 2, color: t.hi });
+            }
+            if let Some(h) = &sel {
+                reticle(ctx, (h.x, h.y), h.r, time, t);
+                if let Some(end) = leader_end {
+                    let elbow = (end.0 - 6.0 * cw, end.1);
+                    ctx.draw(&Seg { a: polar((h.x, h.y), h.r * 2.6 + 3.0, (elbow.1 - h.y).atan2(elbow.0 - h.x)), b: elbow, color: t.hi });
+                    ctx.draw(&Seg { a: elbow, b: end, color: t.hi });
+                }
+            }
+            if let Some(m) = mouse {
+                ctx.draw(&Seg { a: (m.0 - 2.0 * cw, m.1), b: (m.0 + 2.0 * cw, m.1), color: t.dim });
+                ctx.draw(&Seg { a: (m.0, m.1 - ch), b: (m.0, m.1 + ch), color: t.dim });
+            }
+            ctx.layer();
 
-                for &i in &by_depth {
-                    let n = &nodes[i];
-                    let (x, y, d, k) = proj[i];
-                    let hot = ids_sel.as_deref() == Some(n.id.as_str()) || ids_hover.as_deref() == Some(n.id.as_str());
-                    let major = matches!(n.kind, NodeKind::Session | NodeKind::Core);
-                    // Finished agents and workflows stay quiet until pointed at; so does whatever a
-                    // locked target is not linked to.
-                    if (matches!(n.kind, NodeKind::Agent | NodeKind::Workflow) && !n.active && !hot && n.warn.is_none()) || (!lit(i) && !major) {
-                        continue;
-                    }
-                    let shown = ((born[i] * 1.6).min(1.0) * n.label.chars().count() as f64).round() as usize;
-                    let label: String = n.label.chars().take(shown).collect();
-                    let color = if !n.alive || !lit(i) {
-                        t.faint
-                    } else if n.needs {
-                        t.warn
-                    } else if hot {
-                        t.hi
-                    } else {
-                        fogged(n.color, d)
-                    };
-                    let mut style = Style::new().fg(color).bg(t.bg);
-                    if hot || n.active || major {
-                        style = style.add_modifier(Modifier::BOLD);
-                    }
-                    let reach = n.r * k * if n.kind == NodeKind::Core { 2.1 } else { 1.25 };
-                    let row = row_of(y - reach) + 1.0;
-                    let len = label.chars().count() as f64;
-                    let deco = if n.needs { "⚑ " } else { "" };
-                    let text = format!(" {deco}{label} ");
-                    ctx.print(at_col(col_of(x) - (len + 2.0 + deco.chars().count() as f64) / 2.0), at_row(row), Line::from(Span::styled(text, style)));
-                    let sub = if n.needs {
-                        Some(("needs you".to_string(), t.warn))
-                    } else if let Some(w) = n.warn.as_ref().filter(|_| lit(i)) {
-                        Some((clip(w, 24), t.warn))
-                    } else if !n.sub.is_empty() && (hot || major) && lit(i) {
-                        Some((clip(&n.sub, 22), if n.active { t.accent } else { t.dim }))
-                    } else {
-                        None
-                    };
-                    if let Some((sub, c)) = sub {
-                        let len = sub.chars().count() as f64;
-                        ctx.print(at_col(col_of(x) - (len + 2.0) / 2.0), at_row(row + 1.0), Line::from(Span::styled(format!(" {sub} "), Style::new().fg(c).bg(t.bg))));
-                    }
+            for (pt, color) in &dots {
+                ctx.draw(&Points { coords: std::slice::from_ref(pt), color: *color });
+            }
+
+            for &i in &by_depth {
+                let n = &nodes[i];
+                let (x, y, d, k) = proj[i];
+                let hot = ids_sel.as_deref() == Some(n.id.as_str()) || ids_hover.as_deref() == Some(n.id.as_str());
+                let major = matches!(n.kind, NodeKind::Session | NodeKind::Core);
+                // Finished agents and workflows stay quiet until pointed at; so does whatever a
+                // locked target is not linked to.
+                if (matches!(n.kind, NodeKind::Agent | NodeKind::Workflow) && !n.active && !hot && n.warn.is_none()) || (!lit(i) && !major) {
+                    continue;
                 }
-                for e in edges.iter().filter(|e| e.alarm.is_some()) {
-                    let (a, b) = (at[e.a], at[e.b]);
-                    let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
-                    let text = format!(" ✖ {} ", e.alarm.as_deref().unwrap_or(""));
-                    let len = text.chars().count() as f64;
-                    ctx.print(at_col(col_of(mid.0) - len / 2.0), at_row(row_of(mid.1)), Line::from(Span::styled(text, Style::new().fg(t.bg).bg(t.err).add_modifier(Modifier::BOLD))));
+                let shown = ((born[i] * 1.6).min(1.0) * n.label.chars().count() as f64).round() as usize;
+                let label: String = n.label.chars().take(shown).collect();
+                let color = if !n.alive || !lit(i) {
+                    t.faint
+                } else if n.needs {
+                    t.warn
+                } else if hot {
+                    t.hi
+                } else {
+                    fogged(n.color, d)
+                };
+                let mut style = Style::new().fg(color).bg(t.bg);
+                if hot || n.active || major {
+                    style = style.add_modifier(Modifier::BOLD);
                 }
-                for (i, u, label, color) in &sparks {
-                    let (x, y) = at[*i];
-                    let fade = if *u < 0.6 { *color } else { t.dim };
-                    let r = nodes[*i].r * proj[*i].3;
-                    let row = row_of(y + r) - 1.0 - (u * 2.0).floor();
-                    ctx.print(at_col(col_of(x + r) + 2.0), at_row(row), Line::from(Span::styled(clip(label, 18), Style::new().fg(fade).bg(t.bg))));
+                let reach = n.r * k * if n.kind == NodeKind::Core { 2.1 } else { 1.25 };
+                let row = row_of(y - reach) + 1.0;
+                let len = label.chars().count() as f64;
+                let deco = if n.needs { "⚑ " } else { "" };
+                let text = format!(" {deco}{label} ");
+                ctx.print(at_col(col_of(x) - (len + 2.0 + deco.chars().count() as f64) / 2.0), at_row(row), Line::from(Span::styled(text, style)));
+                let sub = if n.needs {
+                    Some(("needs you".to_string(), t.warn))
+                } else if let Some(w) = n.warn.as_ref().filter(|_| lit(i)) {
+                    Some((clip(w, 24), t.warn))
+                } else if !n.sub.is_empty() && (hot || major) && lit(i) {
+                    Some((clip(&n.sub, 22), if n.active { t.accent } else { t.dim }))
+                } else {
+                    None
+                };
+                if let Some((sub, c)) = sub {
+                    let len = sub.chars().count() as f64;
+                    ctx.print(
+                        at_col(col_of(x) - (len + 2.0) / 2.0),
+                        at_row(row + 1.0),
+                        Line::from(Span::styled(format!(" {sub} "), Style::new().fg(c).bg(t.bg))),
+                    );
                 }
-                if let (Some((label, sub, color)), Some(m)) = (&hover_tip, mouse) {
-                    let (c, r) = (col_of(m.0) + 2.0, row_of(m.1) - 2.0);
-                    ctx.print(at_col(c), at_row(r), Line::from(Span::styled(format!(" {label} "), Style::new().fg(*color).bg(t.surface).add_modifier(Modifier::BOLD))));
-                    if !sub.is_empty() {
-                        ctx.print(at_col(c), at_row(r + 1.0), Line::from(Span::styled(format!(" {} ", clip(sub, 30)), Style::new().fg(t.dim).bg(t.surface))));
-                    }
+            }
+            for e in edges.iter().filter(|e| e.alarm.is_some()) {
+                let (a, b) = (at[e.a], at[e.b]);
+                let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+                let text = format!(" ✖ {} ", e.alarm.as_deref().unwrap_or(""));
+                let len = text.chars().count() as f64;
+                ctx.print(
+                    at_col(col_of(mid.0) - len / 2.0),
+                    at_row(row_of(mid.1)),
+                    Line::from(Span::styled(text, Style::new().fg(t.bg).bg(t.err).add_modifier(Modifier::BOLD))),
+                );
+            }
+            for (i, u, label, color) in &sparks {
+                let (x, y) = at[*i];
+                let fade = if *u < 0.6 { *color } else { t.dim };
+                let r = nodes[*i].r * proj[*i].3;
+                let row = row_of(y + r) - 1.0 - (u * 2.0).floor();
+                ctx.print(at_col(col_of(x + r) + 2.0), at_row(row), Line::from(Span::styled(clip(label, 18), Style::new().fg(fade).bg(t.bg))));
+            }
+            if let (Some((label, sub, color)), Some(m)) = (&hover_tip, mouse) {
+                let (c, r) = (col_of(m.0) + 2.0, row_of(m.1) - 2.0);
+                ctx.print(
+                    at_col(c),
+                    at_row(r),
+                    Line::from(Span::styled(format!(" {label} "), Style::new().fg(*color).bg(t.surface).add_modifier(Modifier::BOLD))),
+                );
+                if !sub.is_empty() {
+                    ctx.print(at_col(c), at_row(r + 1.0), Line::from(Span::styled(format!(" {} ", clip(sub, 30)), Style::new().fg(t.dim).bg(t.surface))));
                 }
-            });
+            }
+        });
         f.render_widget(canvas, area);
         self.overlays(f, area, t, world, order, names, sel.as_ref(), callout);
         self.settle = false;
@@ -589,11 +599,7 @@ impl HudState {
         let k = if settle { 1.0 } else { 1.0 - (-dt * 5.0).exp() };
         for n in nodes {
             if !self.pos.contains_key(&n.id) {
-                let start = if settle {
-                    n.target
-                } else {
-                    n.parent.as_ref().and_then(|p| self.pos.get(p).copied()).unwrap_or((0.0, 0.0, 0.0))
-                };
+                let start = if settle { n.target } else { n.parent.as_ref().and_then(|p| self.pos.get(p).copied()).unwrap_or((0.0, 0.0, 0.0)) };
                 self.pos.insert(n.id.clone(), start);
                 let born = if settle { now.checked_sub(Duration::from_secs(5)).unwrap_or(now) } else { now };
                 self.born.insert(n.id.clone(), born);
@@ -676,7 +682,17 @@ impl HudState {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn overlays(&self, f: &mut Frame, area: Rect, t: &Theme, world: &World, order: &[usize], names: &HashMap<usize, String>, sel: Option<&Hit>, callout: Option<Rect>) {
+    fn overlays(
+        &self,
+        f: &mut Frame,
+        area: Rect,
+        t: &Theme,
+        world: &World,
+        order: &[usize],
+        names: &HashMap<usize, String>,
+        sel: Option<&Hit>,
+        callout: Option<Rect>,
+    ) {
         let now = world.now;
         let live = world.sessions.iter().filter(|s| s.alive).count();
         let busy = world.sessions.iter().filter(|s| s.busy()).count();
@@ -693,12 +709,18 @@ impl HudState {
             buf.set_string(x, y, "┃", Style::new().fg(t.grad(g)));
         }
 
-        let kv = |k: &str, v: String, c: Color| {
-            Line::from(vec![Span::styled(format!("{k:<9}"), Style::new().fg(t.faint)), Span::styled(v, Style::new().fg(c))])
+        let kv =
+            |k: &str, v: String, c: Color| Line::from(vec![Span::styled(format!("{k:<9}"), Style::new().fg(t.faint)), Span::styled(v, Style::new().fg(c))]);
+        let status = if busy > 0 {
+            ("ACTIVE", t.ok)
+        } else if live > 0 {
+            ("STANDBY", t.dim)
+        } else {
+            ("NO SIGNAL", t.err)
         };
-        let status = if busy > 0 { ("ACTIVE", t.ok) } else if live > 0 { ("STANDBY", t.dim) } else { ("NO SIGNAL", t.err) };
         let rate: u64 = world.sessions.iter().filter(|s| s.alive).map(|s| vitals::money_rate(s, now)).sum();
-        let view = if self.goal_depth > 0.5 { format!("3D · {:.0}° · {:.1}×", self.pitch.to_degrees(), self.zoom) } else { format!("flat · {:.1}×", self.zoom) };
+        let view =
+            if self.goal_depth > 0.5 { format!("3D · {:.0}° · {:.1}×", self.pitch.to_degrees(), self.zoom) } else { format!("flat · {:.1}×", self.zoom) };
         let lines = [
             Line::from(vec![
                 Span::styled("◤ SYSTEM ", Style::new().fg(t.hi).add_modifier(Modifier::BOLD)),
@@ -981,7 +1003,7 @@ fn build(
     let n = order.len().max(1);
     let warn_of = |si: usize, a: usize| alerts.iter().find(|x| x.si == si && x.agent == a).map(Alert::short);
     // Shared resources: MCP servers and skills, with the sessions that use them.
-    let mut res: Vec<(String, NodeKind, String, u32, Vec<(usize, bool)>)> = Vec::new();
+    let mut res: Vec<Shared> = Vec::new();
     let mut res_ix: HashMap<String, usize> = HashMap::new();
     let mut note = |key: String, kind: NodeKind, label: String, weight: u32, user: (usize, bool)| {
         let i = *res_ix.entry(key.clone()).or_insert_with(|| {
@@ -1036,41 +1058,49 @@ fn build(
                 "workflow-subagent" => ag.description.clone(),
                 k => k.to_string(),
             };
-            kids.push((running, ag.last_at, Node {
-                id: format!("a:{}:{a}", s.id),
-                kind: NodeKind::Agent,
-                label: clip(&label, 14),
-                sub: clip(&ag.description, 24),
-                parent: Some(sid.clone()),
-                session: Some(si),
-                target: p,
-                active: running,
-                alive: s.alive,
-                needs: false,
-                color: t.agent,
-                r: maxr * 0.028,
-                warn: warn_of(si, a),
-            }));
+            kids.push((
+                running,
+                ag.last_at,
+                Node {
+                    id: format!("a:{}:{a}", s.id),
+                    kind: NodeKind::Agent,
+                    label: clip(&label, 14),
+                    sub: clip(&ag.description, 24),
+                    parent: Some(sid.clone()),
+                    session: Some(si),
+                    target: p,
+                    active: running,
+                    alive: s.alive,
+                    needs: false,
+                    color: t.agent,
+                    r: maxr * 0.028,
+                    warn: warn_of(si, a),
+                },
+            ));
         }
         for (w, wf) in s.workflows.iter().enumerate() {
             let step = wf.step.as_deref().and_then(|x| s.step_by_tool(x));
             let running = s.alive && step.is_some_and(|x| x.running());
             let race = insight::race(world, s, w).filter(|_| running).map(|r| vitals::race_chip(&r));
-            kids.push((running, step.map_or(0, |x| x.started), Node {
-                id: format!("w:{}:{w}", s.id),
-                kind: NodeKind::Workflow,
-                label: clip(&wf.name, 16),
-                sub: race.unwrap_or_else(|| format!("{} phases · {} agents", wf.phases.len(), wf.agents.len().max(wf.live.len()))),
-                parent: Some(sid.clone()),
-                session: Some(si),
-                target: p,
-                active: running,
-                alive: s.alive,
-                needs: false,
-                color: t.workflow,
-                r: maxr * 0.032,
-                warn: None,
-            }));
+            kids.push((
+                running,
+                step.map_or(0, |x| x.started),
+                Node {
+                    id: format!("w:{}:{w}", s.id),
+                    kind: NodeKind::Workflow,
+                    label: clip(&wf.name, 16),
+                    sub: race.unwrap_or_else(|| format!("{} phases · {} agents", wf.phases.len(), wf.agents.len().max(wf.live.len()))),
+                    parent: Some(sid.clone()),
+                    session: Some(si),
+                    target: p,
+                    active: running,
+                    alive: s.alive,
+                    needs: false,
+                    color: t.workflow,
+                    r: maxr * 0.032,
+                    warn: None,
+                },
+            ));
         }
         kids.sort_by_key(|(running, at, node)| (Reverse(node.warn.is_some()), Reverse(*running), Reverse(*at)));
         kids.truncate(5);
@@ -1104,7 +1134,12 @@ fn build(
             id: key,
             kind,
             label: clip(&label, 16),
-            sub: format!("{weight} {} · {} session{}", if kind == NodeKind::Mcp { "calls" } else { "uses" }, users.len(), if users.len() == 1 { "" } else { "s" }),
+            sub: format!(
+                "{weight} {} · {} session{}",
+                if kind == NodeKind::Mcp { "calls" } else { "uses" },
+                users.len(),
+                if users.len() == 1 { "" } else { "s" }
+            ),
             parent: Some("core".into()),
             session: None,
             // A crown above the floor in 3D.
@@ -1132,9 +1167,7 @@ fn build(
 }
 
 fn target_lines(h: &Hit, world: &World, t: &Theme) -> Vec<Line<'static>> {
-    let kv = |k: &str, v: String| {
-        Line::from(vec![Span::styled(format!("{k:<8} "), Style::new().fg(t.faint)), Span::styled(v, Style::new().fg(t.fg))])
-    };
+    let kv = |k: &str, v: String| Line::from(vec![Span::styled(format!("{k:<8} "), Style::new().fg(t.faint)), Span::styled(v, Style::new().fg(t.fg))]);
     let head = |s: String, c: Color| Line::from(Span::styled(s, Style::new().fg(c).add_modifier(Modifier::BOLD)));
     let now = world.now;
     let session = h.session.map(|si| &world.sessions[si]);
@@ -1148,7 +1181,10 @@ fn target_lines(h: &Hit, world: &World, t: &Theme) -> Vec<Line<'static>> {
                 kv("status", if s.alive { s.status.clone() } else { "ended".into() }),
                 kv("model", format!("{} · ctx {} of {}", short_model(&s.agents[0].model), fmt_n(fc.ctx), fmt_n(fc.limit))),
                 kv("flow", format!("⇡ {}/m · ⇣ {}/m", fmt_n(s.tok_up.per_min(now)), fmt_n(s.tok_down.per_min(now)))),
-                kv("cache", format!("{} · {} so far", s.cache_ratio(now, 60).map_or("–".into(), |r| format!("{:.0}% hits", r * 100.0)), vitals::money(s.cost_micros))),
+                kv(
+                    "cache",
+                    format!("{} · {} so far", s.cache_ratio(now, 60).map_or("–".into(), |r| format!("{:.0}% hits", r * 100.0)), vitals::money(s.cost_micros)),
+                ),
                 kv("agents", format!("{} running of {}", s.running_agents(), s.agents.len() - 1)),
             ];
             if let Some((_, st)) = s.current() {
@@ -1234,7 +1270,18 @@ fn polar(c: (f64, f64), r: f64, a: f64) -> (f64, f64) {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn node_shape(ctx: &mut ratatui::widgets::canvas::Context, n: &Node, (x, y): (f64, f64), size: f64, color: Color, time: f64, born: f64, fx: bool, dim: bool, t: &Theme) {
+fn node_shape(
+    ctx: &mut ratatui::widgets::canvas::Context,
+    n: &Node,
+    (x, y): (f64, f64),
+    size: f64,
+    color: Color,
+    time: f64,
+    born: f64,
+    fx: bool,
+    dim: bool,
+    t: &Theme,
+) {
     let appear = born.min(1.0);
     let r = size * (0.3 + 0.7 * appear * appear * (3.0 - 2.0 * appear));
     let color = if n.alive && !dim { color } else { t.faint };

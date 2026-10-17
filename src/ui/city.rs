@@ -300,14 +300,14 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[us
                 _ => 0.45,
             };
             let reading = now - l.last_read < 600_000;
-            let alarm = l.collide && (app.ms() / 300) % 2 == 0;
+            let alarm = l.collide && (app.ms() / 300).is_multiple_of(2);
             let base_c = if alarm { (255, 70, 70) } else { shade(tint, bright) };
             building(f.buffer_mut(), x0, gy, h, base_c, reading, frame, li, t.shadow);
             let top = gy.saturating_sub(h + 1);
             let buf = f.buffer_mut();
             if l.collide {
                 put(buf, x0 + 2, top.saturating_sub(1), "◆", if alarm { t.err } else { t.warn });
-            } else if now - l.last_edit < 90_000 && (frame / 5) % 2 == 0 {
+            } else if now - l.last_edit < 90_000 && (frame / 5).is_multiple_of(2) {
                 put(buf, x0 + 2, top.saturating_sub(1), "●", t.accent);
             }
             if picked || hovered {
@@ -379,7 +379,7 @@ fn building(buf: &mut Buffer, x0: u16, gy: u16, h: u16, base: Rgb, reading: bool
     for y in top_y..=gy {
         for x in x0..x0 + FACE_W {
             if x == x0 + 1 && y < gy && h >= 2 {
-                let on = reading && (seed + y as usize + frame / 8) % 3 != 0;
+                let on = reading && !(seed + y as usize + frame / 8).is_multiple_of(3);
                 cell(x, y, "▪", Some(if on { lit } else { unlit }), Some(front));
             } else {
                 cell(x, y, " ", None, Some(front));
@@ -400,12 +400,8 @@ fn side_panel(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usiz
     let now = world.now;
     let names = names(world, order);
     let n_coll = ins.collisions.len() as u16;
-    let [lot_area, coll_area, hot_area] = Layout::vertical([
-        Constraint::Length(10),
-        Constraint::Length(if n_coll > 0 { 3 + n_coll.min(4) } else { 0 }),
-        Constraint::Min(4),
-    ])
-    .areas(area);
+    let [lot_area, coll_area, hot_area] =
+        Layout::vertical([Constraint::Length(10), Constraint::Length(if n_coll > 0 { 3 + n_coll.min(4) } else { 0 }), Constraint::Min(4)]).areas(area);
     let inner = panel(f, lot_area, t, Line::from(Span::styled(" ◢ LOT ", Style::new().fg(t.fg).add_modifier(Modifier::BOLD))), None, false, false);
     let kv = |k: &str, v: String, c: Color| Line::from(vec![Span::styled(format!("{k:<8} "), Style::new().fg(t.faint)), Span::styled(v, Style::new().fg(c))]);
     let mut lines = Vec::new();
@@ -414,9 +410,17 @@ fn side_panel(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usiz
         let s = &world.sessions[l.owner];
         let agent = if l.agent == 0 { "main".to_string() } else { s.agents.get(l.agent).map_or("agent".into(), |a| clip(&a.description, 24)) };
         lines.push(Line::from(Span::styled(clip(&l.rel, inner.width as usize), Style::new().fg(t.hi).add_modifier(Modifier::BOLD))));
-        lines.push(kv("last", format!("{} · {owner} · {agent}", if now - l.last() < 60_000 { "now".into() } else { format!("{} ago", fmt_dur(now - l.last())) }), t.session(identity(order, l.owner))));
+        lines.push(kv(
+            "last",
+            format!("{} · {owner} · {agent}", if now - l.last() < 60_000 { "now".into() } else { format!("{} ago", fmt_dur(now - l.last())) }),
+            t.session(identity(order, l.owner)),
+        ));
         if l.edits > 0 {
-            lines.push(kv("changed", format!("{}× · +{} −{} lines{}", l.edits, fmt_n(l.added as u64), fmt_n(l.removed as u64), if l.created { " · created" } else { "" }), t.fg));
+            lines.push(kv(
+                "changed",
+                format!("{}× · +{} −{} lines{}", l.edits, fmt_n(l.added as u64), fmt_n(l.removed as u64), if l.created { " · created" } else { "" }),
+                t.fg,
+            ));
         }
         if l.reads > 0 {
             lines.push(kv("read", format!("{}× · {} ago", l.reads, fmt_dur(now - l.last_read)), t.fg));

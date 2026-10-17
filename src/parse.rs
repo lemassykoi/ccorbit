@@ -33,9 +33,7 @@ pub fn summarize(name: &str, input: &Value) -> String {
     let s = |k: &str| input.get(k).and_then(Value::as_str);
     let text = match name {
         "Bash" => s("description").or(s("command")).map(str::to_string),
-        "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => {
-            s("file_path").or(s("notebook_path")).map(short_path)
-        }
+        "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => s("file_path").or(s("notebook_path")).map(short_path),
         "Grep" => s("pattern").map(|p| match s("path") {
             Some(d) => format!("{p}  in {}", short_path(d)),
             None => p.to_string(),
@@ -43,11 +41,7 @@ pub fn summarize(name: &str, input: &Value) -> String {
         "Glob" => s("pattern").map(str::to_string),
         "WebFetch" => s("url").map(str::to_string),
         "WebSearch" | "ToolSearch" => s("query").map(str::to_string),
-        "Agent" | "Task" => Some(format!(
-            "{} · {}",
-            s("subagent_type").unwrap_or("general-purpose"),
-            s("description").unwrap_or("")
-        )),
+        "Agent" | "Task" => Some(format!("{} · {}", s("subagent_type").unwrap_or("general-purpose"), s("description").unwrap_or(""))),
         "Skill" => s("skill").map(|k| match s("args") {
             Some(a) if !a.is_empty() => format!("{k} {a}"),
             _ => k.to_string(),
@@ -55,11 +49,7 @@ pub fn summarize(name: &str, input: &Value) -> String {
         "Workflow" => Some(workflow_meta(input).0),
         "SendMessage" => s("to").map(|t| format!("to {t}")),
         "AskUserQuestion" => input["questions"][0]["question"].as_str().map(str::to_string),
-        "Artifact" => Some(format!(
-            "{} {}",
-            s("action").unwrap_or("publish"),
-            s("file_path").or(s("url")).unwrap_or("")
-        )),
+        "Artifact" => Some(format!("{} {}", s("action").unwrap_or("publish"), s("file_path").or(s("url")).unwrap_or(""))),
         _ => None,
     };
     let text = text.or_else(|| first_string(input)).unwrap_or_default();
@@ -92,8 +82,8 @@ pub fn duration_key(name: &str, input: &Value) -> Option<String> {
 /// The program a shell command runs: `cd x && FOO=1 timeout 60 ./target/release/ccorbit` -> `ccorbit`.
 pub fn command_word(cmd: &str) -> String {
     for seg in cmd.split(['&', ';', '|', '\n']) {
-        let mut words = seg.split_whitespace().map(|w| w.trim_matches(|c| matches!(c, '(' | ')' | '"' | '\'')));
-        while let Some(w) = words.next() {
+        let words = seg.split_whitespace().map(|w| w.trim_matches(|c| matches!(c, '(' | ')' | '"' | '\'')));
+        for w in words {
             if w.is_empty() || w.contains('=') || w.starts_with('-') || w.parse::<f64>().is_ok() {
                 continue;
             }
@@ -108,11 +98,7 @@ pub fn command_word(cmd: &str) -> String {
 }
 
 fn first_string(v: &Value) -> Option<String> {
-    v.as_object()?
-        .values()
-        .filter_map(Value::as_str)
-        .find(|s| !s.trim().is_empty())
-        .map(str::to_string)
+    v.as_object()?.values().filter_map(Value::as_str).find(|s| !s.trim().is_empty()).map(str::to_string)
 }
 
 /// The last part of a path, whatever its separators (`/`, or `\` on Windows).
@@ -155,12 +141,7 @@ pub fn content_text(v: &Value) -> String {
     if let Some(s) = v.as_str() {
         return s.to_string();
     }
-    v.as_array()
-        .into_iter()
-        .flatten()
-        .find_map(|b| b.get("text").and_then(Value::as_str))
-        .unwrap_or("")
-        .to_string()
+    v.as_array().into_iter().flatten().find_map(|b| b.get("text").and_then(Value::as_str)).unwrap_or("").to_string()
 }
 
 /// Content of the first `<name>…</name>` element.

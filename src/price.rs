@@ -43,8 +43,7 @@ pub fn cost_micros(model: &str, t: &Tokens, fast: bool) -> Option<u64> {
     }
     let k = if fast { 2.0 } else { 1.0 };
     let w5 = t.cache_write.saturating_sub(t.cache_write_1h);
-    let usd_per_m =
-        t.fresh as f64 * i + w5 as f64 * i * 1.25 + t.cache_write_1h as f64 * i * 2.0 + t.cache_read as f64 * r + t.output as f64 * o;
+    let usd_per_m = t.fresh as f64 * i + w5 as f64 * i * 1.25 + t.cache_write_1h as f64 * i * 2.0 + t.cache_read as f64 * r + t.output as f64 * o;
     // Dollars per million tokens times tokens is micro-dollars.
     Some((usd_per_m * k).round() as u64)
 }

@@ -8,8 +8,7 @@ use std::time::{Duration, Instant};
 
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
-    MouseEventKind,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 use ratatui::crossterm::execute;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
@@ -21,6 +20,7 @@ use ratatui::{DefaultTerminal, Frame};
 mod city;
 pub(crate) mod vitals;
 
+use crate::Opts;
 use crate::hud::{HudAction, HudState};
 use crate::insight::{self, Alert, Collision, Warn};
 use crate::model::{Feed, Item, Kind, Phase, Session, Step};
@@ -28,7 +28,6 @@ use crate::parse::{clip, server_label, short_model};
 use crate::source::World;
 use crate::theme::{Rgb, THEMES, Theme, rgb, shade};
 use crate::time::{fmt_dur, fmt_n};
-use crate::Opts;
 
 const SPIN: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const BARS: [&str; 9] = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
@@ -61,6 +60,8 @@ enum View {
 
 struct App {
     started: Instant,
+    /// A fixed animation clock in milliseconds, for tests.
+    clock: Option<u128>,
     boot: bool,
     view: View,
     theme: usize,
@@ -132,8 +133,15 @@ impl App {
     fn new(opts: &Opts, replay: bool) -> App {
         App {
             started: Instant::now(),
+            clock: None,
             boot: opts.boot,
-            view: if opts.hud || opts.director { View::Hud } else if replay { View::Session } else { View::Wall },
+            view: if opts.hud || opts.director {
+                View::Hud
+            } else if replay {
+                View::Session
+            } else {
+                View::Wall
+            },
             theme: opts.theme,
             fx: true,
             pick: 0,
@@ -175,7 +183,7 @@ impl App {
     }
 
     fn ms(&self) -> u128 {
-        self.started.elapsed().as_millis()
+        self.clock.unwrap_or_else(|| self.started.elapsed().as_millis())
     }
 
     fn frame(&self) -> usize {
@@ -276,7 +284,7 @@ pub fn run(term: &mut DefaultTerminal, mut world: World, opts: &Opts) -> io::Res
         } else {
             500
         });
-        if dirty || last_draw.map_or(true, |t| t.elapsed() >= every) {
+        if dirty || last_draw.is_none_or(|t| t.elapsed() >= every) {
             term.draw(|f| draw(f, &mut app, &world))?;
             last_draw = Some(Instant::now());
             dirty = false;
@@ -313,8 +321,7 @@ fn draw(f: &mut Frame, app: &mut App, world: &World) {
         boot(f, area, app, world);
         return;
     }
-    let [head, body, foot] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(4), Constraint::Length(1)]).areas(area);
+    let [head, body, foot] = Layout::vertical([Constraint::Length(1), Constraint::Min(4), Constraint::Length(1)]).areas(area);
     let ins = Insights::new(world);
     header(f, head, app, world, &ins);
     let order = order(world);
@@ -381,9 +388,7 @@ fn collect_toasts(app: &mut App, world: &World) -> bool {
                 // run): the feed shows it; repeated failures raise their own warning.
                 (Feed::Failed, Some(Kind::Shell)) => {}
                 (Feed::Failed, _) => fresh.push(Toast::new("✗", format!("{} failed · {name}", it.label), t.err)),
-                (Feed::Done, Some(Kind::Agent)) => {
-                    fresh.push(Toast::new("◆", format!("agent done · {} · {name}", clip(&it.text, 28)), t.agent))
-                }
+                (Feed::Done, Some(Kind::Agent)) => fresh.push(Toast::new("◆", format!("agent done · {} · {name}", clip(&it.text, 28)), t.agent)),
                 (Feed::Done, Some(Kind::Workflow)) => {
                     let race = it
                         .tool
@@ -459,7 +464,11 @@ fn toasts(f: &mut Frame, area: Rect, app: &App) {
             continue;
         }
         let old = age > 4.2;
-        let count = if toast.count > 1 { vec![Span::styled(format!(" ×{} ", toast.count), Style::new().fg(toast.color).add_modifier(Modifier::BOLD))] } else { vec![] };
+        let count = if toast.count > 1 {
+            vec![Span::styled(format!(" ×{} ", toast.count), Style::new().fg(toast.color).add_modifier(Modifier::BOLD))]
+        } else {
+            vec![]
+        };
         let line = fit(
             vec![
                 Span::styled("▌", Style::new().fg(toast.color)),
@@ -486,13 +495,35 @@ fn help(f: &mut Frame, area: Rect, app: &App) {
     let d = |s: &str| Span::styled(s.to_string(), Style::new().fg(t.dim));
     let c = |s: &str, color: Color| Span::styled(s.to_string(), Style::new().fg(color).add_modifier(Modifier::BOLD));
     let lines = vec![
-        Line::from(vec![head("VIEWS"), k("wall"), d(" start   "), k("⏎"), d(" session tree   "), k("g"), d(" HUD hologram   "), k("c"), d(" code city   "), k("esc"), d(" back")]),
+        Line::from(vec![
+            head("VIEWS"),
+            k("wall"),
+            d(" start   "),
+            k("⏎"),
+            d(" session tree   "),
+            k("g"),
+            d(" HUD hologram   "),
+            k("c"),
+            d(" code city   "),
+            k("esc"),
+            d(" back"),
+        ]),
         Line::from(vec![head("MOVE"), k("←↑↓→"), d(" or "), k("hjkl"), d(" select   "), k("tab"), d(" next session or target   "), k("⏎"), d(" open or fold")]),
         Line::from(vec![head(""), k("e"), d(" expand all   "), k("f"), d(" follow newest, or fly to target   "), k("0"), d(" reset the HUD view")]),
         Line::from(vec![head("LOOK"), k("t"), d(" theme   "), k("x"), d(" effects   "), k("m"), d(" mouse off, to select text   "), k("q"), d(" quit")]),
         Line::from(vec![head("JUMP"), k("o"), d(" bring the session's terminal tab forward (start with --allow-jump)")]),
         Line::from(vec![head("MOUSE"), d("click selects · click again opens · wheel scrolls or zooms · drag pans")]),
-        Line::from(vec![head("HUD"), k("drag"), d(" turn   "), k("v"), d(" flat or 3D   "), k("d"), d(" director (the camera runs itself)   "), k("space"), d(" ping")]),
+        Line::from(vec![
+            head("HUD"),
+            k("drag"),
+            d(" turn   "),
+            k("v"),
+            d(" flat or 3D   "),
+            k("d"),
+            d(" director (the camera runs itself)   "),
+            k("space"),
+            d(" ping"),
+        ]),
         Line::from(vec![head("CITY"), k("[ ]"), d(" time window   "), k("⏎"), d(" open the session that touched the file last")]),
         Line::from(vec![head("REPLAY"), k("p"), d(" pause   "), k("<"), d(" "), k(">"), d(" slower, faster")]),
         Line::raw(""),
@@ -603,10 +634,7 @@ fn order(world: &World) -> Vec<usize> {
 }
 
 fn current_session(app: &App, world: &World, order: &[usize]) -> Option<usize> {
-    app.session
-        .as_ref()
-        .and_then(|id| world.sessions.iter().position(|s| &s.id == id))
-        .or_else(|| order.first().copied())
+    app.session.as_ref().and_then(|id| world.sessions.iter().position(|s| &s.id == id)).or_else(|| order.first().copied())
 }
 
 // ---------------------------------------------------------------- boot
@@ -621,10 +649,7 @@ fn boot(f: &mut Frame, area: Rect, app: &App, world: &World) {
     for (i, l) in LOGO.iter().enumerate() {
         let chars: Vec<char> = l.chars().collect();
         let n = ((reveal - i as f64 * 0.08).clamp(0.0, 1.0) * chars.len() as f64) as usize;
-        let mut spans = vec![Span::styled(
-            chars[..n].iter().collect::<String>(),
-            Style::new().fg(t.grad(i as f64 / 5.0)).add_modifier(Modifier::BOLD),
-        )];
+        let mut spans = vec![Span::styled(chars[..n].iter().collect::<String>(), Style::new().fg(t.grad(i as f64 / 5.0)).add_modifier(Modifier::BOLD))];
         if n < chars.len() && n > 0 {
             spans.push(Span::styled("▓▒░", Style::new().fg(t.dim)));
         }
@@ -653,7 +678,7 @@ fn boot(f: &mut Frame, area: Rect, app: &App, world: &World) {
         let mut spans = vec![Span::styled(l.chars().take(n).collect::<String>(), Style::new().fg(if k == 0 { t.accent } else { t.fg }))];
         let typing = n < len && (n > 0 || k == 0);
         let last_done = k == lines.len() - 1 && n == len;
-        if (typing || last_done) && (ms / 250) % 2 == 0 {
+        if (typing || last_done) && (ms / 250).is_multiple_of(2) {
             spans.push(Span::styled("█", Style::new().fg(t.hi)));
         }
         let r = Rect::new(lx, y + 7 + k as u16 + (k > 0) as u16, width + 1, 1).intersection(area);
@@ -679,7 +704,13 @@ fn header(f: &mut Frame, area: Rect, app: &App, world: &World, ins: &Insights) {
         Some(r) => left.push(Span::styled(
             format!(
                 "{} REPLAY ×{} {:>3}% ",
-                if r.paused { "‖" } else if r.done() { "■" } else { "▶" },
+                if r.paused {
+                    "‖"
+                } else if r.done() {
+                    "■"
+                } else {
+                    "▶"
+                },
                 r.speed,
                 (r.progress() * 100.0) as u32
             ),
@@ -690,17 +721,14 @@ fn header(f: &mut Frame, area: Rect, app: &App, world: &World, ins: &Insights) {
             left.push(Span::styled(" made-up sessions ", Style::new().fg(t.accent)));
         }
         None => {
-            let on = busy == 0 || (app.ms() / 500) % 2 == 0;
+            let on = busy == 0 || (app.ms() / 500).is_multiple_of(2);
             left.push(Span::styled(if on { "● LIVE " } else { "○ LIVE " }, Style::new().fg(t.ok).add_modifier(Modifier::BOLD)));
         }
     }
-    left.push(Span::styled(
-        format!(" {live} sessions · {busy} busy · {agents} agents running  "),
-        Style::new().fg(t.fg),
-    ));
+    left.push(Span::styled(format!(" {live} sessions · {busy} busy · {agents} agents running  "), Style::new().fg(t.fg)));
     let waiting = world.sessions.iter().filter(|s| s.needs_you()).count();
     if waiting > 0 {
-        let on = (app.ms() / 500) % 2 == 0;
+        let on = (app.ms() / 500).is_multiple_of(2);
         left.push(Span::styled(
             format!(" ⚑ {waiting} need{} you ", if waiting == 1 { "s" } else { "" }),
             Style::new().fg(t.bg).bg(if on { t.warn } else { t.accent }).add_modifier(Modifier::BOLD),
@@ -708,7 +736,7 @@ fn header(f: &mut Frame, area: Rect, app: &App, world: &World, ins: &Insights) {
         left.push(Span::raw("  "));
     }
     if !ins.collisions.is_empty() {
-        let on = (app.ms() / 400) % 2 == 0;
+        let on = (app.ms() / 400).is_multiple_of(2);
         let n = ins.collisions.len();
         left.push(Span::styled(
             format!(" ✖ {n} collision{} ", if n == 1 { "" } else { "s" }),
@@ -793,8 +821,7 @@ fn wall(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[usize]
     let sky_h = if area.height >= want.min(2 * SLOT_H) + SKY_H + 5 { SKY_H } else { 0 };
     let room = area.height.saturating_sub(sky_h + 5 * u16::from(sky_h > 0));
     let grid_h = (want.min(room) / SLOT_H * SLOT_H).max(SLOT_H.min(area.height));
-    let [grid, sky, feed] =
-        Layout::vertical([Constraint::Length(grid_h), Constraint::Length(sky_h), Constraint::Min(0)]).areas(area);
+    let [grid, sky, feed] = Layout::vertical([Constraint::Length(grid_h), Constraint::Length(sky_h), Constraint::Min(0)]).areas(area);
     let rows_vis = (grid.height / SLOT_H).max(1) as usize;
     app.cols = cols;
     app.pick = app.pick.min(order.len() - 1);
@@ -834,7 +861,7 @@ fn card(f: &mut Frame, rect: Rect, app: &App, world: &World, si: usize, k: usize
     let cx = Ctx { t, now: world.now, frame: app.frame(), fx: app.fx, marks: Some(&ins.marks), world: Some(world) };
     let (busy, needs) = (s.busy(), s.needs_you());
     let me = t.session(k);
-    let blink = (app.ms() / 500) % 2 == 0;
+    let blink = (app.ms() / 500).is_multiple_of(2);
     let dot = if !s.alive {
         Span::styled("○", Style::new().fg(t.faint))
     } else if needs {
@@ -857,10 +884,7 @@ fn card(f: &mut Frame, rect: Rect, app: &App, world: &World, si: usize, k: usize
         Span::raw(" "),
         dot,
         Span::raw(" "),
-        Span::styled(
-            clip(name, rect.width.saturating_sub(18) as usize),
-            Style::new().fg(if s.alive { me } else { t.dim }).add_modifier(Modifier::BOLD),
-        ),
+        Span::styled(clip(name, rect.width.saturating_sub(18) as usize), Style::new().fg(if s.alive { me } else { t.dim }).add_modifier(Modifier::BOLD)),
         Span::raw(" "),
     ]);
     let right = Line::from(vec![pill, Span::raw(" ")]);
@@ -882,11 +906,7 @@ fn card(f: &mut Frame, rect: Rect, app: &App, world: &World, si: usize, k: usize
             ];
             let right = vec![Span::styled(fmt_dur(cx.now - since), Style::new().fg(t.faint))];
             let text = "thinking or writing the next step";
-            if app.fx {
-                fit_shimmer(left, text, cx.frame, t.dim, t.comms, right, w)
-            } else {
-                fit(left, text.into(), Style::new().fg(t.dim), right, w)
-            }
+            if app.fx { fit_shimmer(left, text, cx.frame, t.dim, t.comms, right, w) } else { fit(left, text.into(), Style::new().fg(t.dim), right, w) }
         }
         (None, Some((a, st))) => {
             let (label, text) = st.label();
@@ -995,8 +1015,7 @@ fn signal_feed(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usi
         false,
     );
     let h = inner.height as usize;
-    let mut items: Vec<(usize, &crate::model::FeedItem)> =
-        order.iter().flat_map(|&si| world.sessions[si].feed.iter().map(move |it| (si, it))).collect();
+    let mut items: Vec<(usize, &crate::model::FeedItem)> = order.iter().flat_map(|&si| world.sessions[si].feed.iter().map(move |it| (si, it))).collect();
     items.sort_by_key(|(_, it)| it.at);
     let start = items.len().saturating_sub(h);
     let w = inner.width as usize;
@@ -1045,12 +1064,9 @@ fn signal_feed(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usi
 
 fn no_signal(f: &mut Frame, area: Rect, app: &App, msg: &str, hint: &str) {
     let t = app.t();
-    let on = (app.ms() / 600) % 2 == 0;
+    let on = (app.ms() / 600).is_multiple_of(2);
     let lines = vec![
-        Line::from(Span::styled(
-            "▓▒░   N O   S I G N A L   ░▒▓",
-            Style::new().fg(if on { t.hi } else { t.dim }).add_modifier(Modifier::BOLD),
-        )),
+        Line::from(Span::styled("▓▒░   N O   S I G N A L   ░▒▓", Style::new().fg(if on { t.hi } else { t.dim }).add_modifier(Modifier::BOLD))),
         Line::raw(""),
         Line::from(Span::styled(msg.to_string(), Style::new().fg(t.fg))),
         Line::from(Span::styled(hint.to_string(), Style::new().fg(t.dim))),
@@ -1102,15 +1118,15 @@ fn item_rows(s: &Session, a: usize, depth: usize, out: &mut Vec<Row>, guard: usi
     for (i, item) in s.agents[a].items.iter().enumerate() {
         out.push(Row { depth, r: RowRef::Item(a, i) });
         let Item::Step(st) = item else { continue };
-        if let Some(c) = st.child {
-            if !s.collapsed(c) {
-                item_rows(s, c, depth + 1, out, guard + 1);
-            }
+        if let Some(c) = st.child
+            && !s.collapsed(c)
+        {
+            item_rows(s, c, depth + 1, out, guard + 1);
         }
-        if let Some(w) = st.workflow {
-            if s.wf_expanded(w) {
-                workflow_rows(s, w, depth + 1, out);
-            }
+        if let Some(w) = st.workflow
+            && s.wf_expanded(w)
+        {
+            workflow_rows(s, w, depth + 1, out);
         }
     }
 }
@@ -1196,7 +1212,7 @@ fn tree(f: &mut Frame, area: Rect, app: &mut App, world: &World, s: &Session, ro
         })
         .collect();
     if cursor {
-        let on = (app.ms() / 500) % 2 == 0;
+        let on = (app.ms() / 500).is_multiple_of(2);
         lines.push(Line::from(Span::styled(if on { "  █" } else { "   " }, Style::new().fg(t.fg))));
     }
     f.render_widget(Paragraph::new(lines), inner);
@@ -1236,22 +1252,25 @@ fn row_line(s: &Session, row: &Row, cx: &Ctx, width: usize) -> Line<'static> {
                 }
                 left.push(Span::styled(format!("{:<10} ", clip(&label, 10)), lstyle));
                 let running = st.running() && s.alive;
-                let tstyle = Style::new().fg(if fresh { t.hi } else if running { t.fg } else { t.dim });
+                let tstyle = Style::new().fg(if fresh {
+                    t.hi
+                } else if running {
+                    t.fg
+                } else {
+                    t.dim
+                });
                 let mut right = Vec::new();
                 if let Some(m) = cx.marks.and_then(|m| m.get(&st.id)) {
                     right.push(Span::styled(format!("{m} · "), Style::new().fg(t.warn).add_modifier(Modifier::BOLD)));
                 }
-                if let (Some(w), Some(world)) = (st.workflow, cx.world) {
-                    if let Some(r) = insight::race(world, s, w).filter(|_| running || st.finished().is_some()) {
-                        right.push(Span::styled(format!("{} · ", vitals::race_chip(&r)), Style::new().fg(t.workflow)));
-                    }
+                if let (Some(w), Some(world)) = (st.workflow, cx.world)
+                    && let Some(r) = insight::race(world, s, w).filter(|_| running || st.finished().is_some())
+                {
+                    right.push(Span::styled(format!("{} · ", vitals::race_chip(&r)), Style::new().fg(t.workflow)));
                 }
                 if let Some(c) = st.child {
                     let ag = &s.agents[c];
-                    right.push(Span::styled(
-                        format!("{} steps · out {} · ", ag.step_count(), fmt_n(ag.tokens().output)),
-                        Style::new().fg(t.faint),
-                    ));
+                    right.push(Span::styled(format!("{} steps · out {} · ", ag.step_count(), fmt_n(ag.tokens().output)), Style::new().fg(t.faint)));
                 }
                 if let Some(w) = st.workflow {
                     let wf = &s.workflows[w];
@@ -1276,8 +1295,7 @@ fn row_line(s: &Session, row: &Row, cx: &Ctx, width: usize) -> Line<'static> {
                 .filter(|&&a| wf.phase_of(&s.agents[a].wf_phase) == Some(p))
                 .map(|&a| if s.agent_running(a) { "running" } else { "done" })
                 .collect();
-            let of_phase: Vec<&str> =
-                if live.is_empty() { wf.agents.iter().filter(|a| a.phase == p).map(|a| a.state.as_str()).collect() } else { live };
+            let of_phase: Vec<&str> = if live.is_empty() { wf.agents.iter().filter(|a| a.phase == p).map(|a| a.state.as_str()).collect() } else { live };
             let done = of_phase.iter().filter(|s| **s == "done").count();
             let running = of_phase.iter().filter(|s| **s == "running").count();
             let rest = of_phase.len() - done - running;
@@ -1624,7 +1642,7 @@ fn stream(n: usize, frame: usize, active: bool, color: Color, t: &Theme) -> Span
     if !active {
         return Span::styled("·".repeat(n), Style::new().fg(t.faint));
     }
-    let text: String = (0..n).map(|i| if (i + 5 - frame % 5) % 5 == 0 { '▸' } else { '·' }).collect();
+    let text: String = (0..n).map(|i| if (i + 5 - frame % 5).is_multiple_of(5) { '▸' } else { '·' }).collect();
     Span::styled(text, Style::new().fg(color))
 }
 
@@ -1684,10 +1702,10 @@ fn drop_shadow(buf: &mut Buffer, r: Rect, t: &Theme) {
 fn light_edge(buf: &mut Buffer, r: Rect, t: &Theme) {
     let span = r.width.saturating_sub(1).max(1) as f64;
     for x in r.x..r.right() {
-        if let Some(c) = buf.cell_mut((x, r.y)) {
-            if matches!(c.symbol(), "─" | "═" | "╭" | "╮" | "╔" | "╗") {
-                c.set_fg(t.grad((x - r.x) as f64 / span));
-            }
+        if let Some(c) = buf.cell_mut((x, r.y))
+            && matches!(c.symbol(), "─" | "═" | "╭" | "╮" | "╔" | "╗")
+        {
+            c.set_fg(t.grad((x - r.x) as f64 / span));
         }
     }
     for y in r.y + 1..r.bottom().saturating_sub(1) {
@@ -1705,10 +1723,7 @@ fn pill(text: &str, t: &Theme) -> Vec<Span<'static>> {
     let n = text.chars().count().max(2);
     let mut spans = vec![Span::styled("▐", Style::new().fg(t.grad(0.0)))];
     for (i, ch) in text.chars().enumerate() {
-        spans.push(Span::styled(
-            ch.to_string(),
-            Style::new().fg(rgb((12, 12, 12))).bg(t.grad(i as f64 / (n - 1) as f64)).add_modifier(Modifier::BOLD),
-        ));
+        spans.push(Span::styled(ch.to_string(), Style::new().fg(rgb((12, 12, 12))).bg(t.grad(i as f64 / (n - 1) as f64)).add_modifier(Modifier::BOLD)));
     }
     spans.push(Span::styled("▌", Style::new().fg(t.grad(1.0))));
     spans
@@ -1773,7 +1788,13 @@ fn skyline(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[usi
         } else {
             "ended".into()
         };
-        let label_style = Style::new().fg(if needs { t.warn } else if rate > 0 { t.accent } else { t.faint });
+        let label_style = Style::new().fg(if needs {
+            t.warn
+        } else if rate > 0 {
+            t.accent
+        } else {
+            t.faint
+        });
         centered(f.buffer_mut(), slot_x, ground + 2, TOWER_SLOT, &name, style);
         centered(f.buffer_mut(), slot_x, ground + 3, TOWER_SLOT, &label, label_style);
     }
@@ -1808,7 +1829,7 @@ fn tower(buf: &mut Buffer, x0: u16, ground: u16, h: u16, base: Rgb, busy: bool, 
             let col = x - x0;
             if row >= 1 && col % 2 == 1 && col < w - 1 {
                 let k = hash(seed, x, y, if busy { frame / 7 } else { 0 });
-                let on = if busy { k % 3 != 0 } else { alive && k % 6 == 0 };
+                let on = if busy { !k.is_multiple_of(3) } else { alive && k.is_multiple_of(6) };
                 put(x, y, "▪", Some(if on { lit } else { unlit }), Some(front));
             } else {
                 put(x, y, " ", None, Some(front));
@@ -1825,7 +1846,7 @@ fn tower(buf: &mut Buffer, x0: u16, ground: u16, h: u16, base: Rgb, busy: bool, 
     }
     if busy && top_y >= 3 {
         put(x0 + 2, top_y - 2, "╻", Some(t.dim), None);
-        let on = (frame / 6) % 2 == 0;
+        let on = (frame / 6).is_multiple_of(2);
         put(x0 + 2, top_y - 3, if on { "●" } else { "·" }, Some(if on { t.err } else { t.faint }), None);
     }
 }
@@ -1877,7 +1898,7 @@ fn sparkline(values: &[u32], t: &Theme) -> Vec<Span<'static>> {
             if v == 0 {
                 Span::styled("·", Style::new().fg(t.faint))
             } else {
-                let level = ((v * 8 + max - 1) / max).clamp(1, 8) as usize;
+                let level = (v * 8).div_ceil(max).clamp(1, 8) as usize;
                 Span::styled(BARS[level], Style::new().fg(if level >= 6 { t.hi } else { t.fg }))
             }
         })
@@ -2068,10 +2089,8 @@ fn on_mouse(app: &mut App, world: &mut World, m: MouseEvent) {
                 if let Some(p) = app.city.hit(m.column, m.row) {
                     let again = double(app) || app.city.sel.as_deref() == Some(p.as_str());
                     app.city.sel = Some(p.clone());
-                    if again {
-                        if let Some(&si) = app.city.owner.get(&p) {
-                            open_session(app, world, si);
-                        }
+                    if again && let Some(&si) = app.city.owner.get(&p) {
+                        open_session(app, world, si);
                     }
                 }
             }
@@ -2089,10 +2108,8 @@ fn on_mouse(app: &mut App, world: &mut World, m: MouseEvent) {
                 if let Some(&(_, k)) = app.cards.iter().find(|(r, _)| r.contains(at)) {
                     let again = double(app) || app.pick == k;
                     app.pick = k;
-                    if again {
-                        if let Some(&si) = order(world).get(k) {
-                            open_session(app, world, si);
-                        }
+                    if again && let Some(&si) = order(world).get(k) {
+                        open_session(app, world, si);
                     }
                 }
             }
@@ -2264,6 +2281,7 @@ pub fn snapshot_html(world: &World, opts: &Opts, w: u16, h: u16, dir: &std::path
     let mut term = Terminal::new(TestBackend::new(w, h))?;
     app.started = Instant::now().checked_sub(Duration::from_millis(1100)).unwrap_or_else(Instant::now);
     app.hud.settle = true;
+    // harness: allow write (developer snapshot, hidden --snapshot-html)
     std::fs::create_dir_all(dir)?;
     let frames = [
         ("boot", true, View::Wall),
@@ -2304,6 +2322,7 @@ pub fn snapshot_html(world: &World, opts: &Opts, w: u16, h: u16, dir: &std::path
             app.hud.settle = true;
         }
         term.draw(|f| draw(f, &mut app, world))?;
+        // harness: allow write (developer snapshot, hidden --snapshot-html)
         std::fs::write(dir.join(format!("{name}.html")), buffer_html(term.backend().buffer()))?;
     }
     Ok(())
@@ -2324,7 +2343,16 @@ fn buffer_html(buf: &Buffer) -> String {
             // Braille is drawn as its raised dots only, the way terminals show it (the browser's
             // Braille font also outlines the unraised ones).
             if let Some(bits) = c.symbol().chars().next().map(|ch| ch as u32).filter(|&u| (0x2801..=0x28FF).contains(&u)).map(|u| u - 0x2800) {
-                const AT: [(u32, f32, f32); 8] = [(0x01, 2.5, 2.5), (0x02, 2.5, 6.8), (0x04, 2.5, 11.1), (0x40, 2.5, 15.4), (0x08, 6.5, 2.5), (0x10, 6.5, 6.8), (0x20, 6.5, 11.1), (0x80, 6.5, 15.4)];
+                const AT: [(u32, f32, f32); 8] = [
+                    (0x01, 2.5, 2.5),
+                    (0x02, 2.5, 6.8),
+                    (0x04, 2.5, 11.1),
+                    (0x40, 2.5, 15.4),
+                    (0x08, 6.5, 2.5),
+                    (0x10, 6.5, 6.8),
+                    (0x20, 6.5, 11.1),
+                    (0x80, 6.5, 15.4),
+                ];
                 let _ = write!(out, "<span style=\"background:{bg}\"><svg width=9 height=18>");
                 for (bit, x, y) in AT {
                     if bits & bit != 0 {
@@ -2352,8 +2380,22 @@ fn buffer_html(buf: &Buffer) -> String {
 /// A ratatui color as CSS, resolving the xterm 256-color palette.
 fn css(c: Color, default: (u8, u8, u8)) -> String {
     const BASE: [(u8, u8, u8); 16] = [
-        (0, 0, 0), (205, 49, 49), (13, 188, 121), (229, 229, 16), (36, 114, 200), (188, 63, 188), (17, 168, 205), (229, 229, 229),
-        (102, 102, 102), (241, 76, 76), (35, 209, 139), (245, 245, 67), (59, 142, 234), (214, 112, 214), (41, 184, 219), (255, 255, 255),
+        (0, 0, 0),
+        (205, 49, 49),
+        (13, 188, 121),
+        (229, 229, 16),
+        (36, 114, 200),
+        (188, 63, 188),
+        (17, 168, 205),
+        (229, 229, 229),
+        (102, 102, 102),
+        (241, 76, 76),
+        (35, 209, 139),
+        (245, 245, 67),
+        (59, 142, 234),
+        (214, 112, 214),
+        (41, 184, 219),
+        (255, 255, 255),
     ];
     let (r, g, b) = match c {
         Color::Reset => default,
@@ -2536,5 +2578,126 @@ mod tests {
         assert_eq!(toasts.len(), 2);
         assert_eq!(toasts[0].count, 4);
         assert!(toasts[0].born.elapsed() >= Duration::from_millis(250), "a counted notice does not slide in again");
+    }
+
+    /// The moment every golden screen shows.
+    const FIXED: i64 = 1_790_000_000_000;
+
+    fn demo_world() -> World {
+        let mut world = World::demo_at(FIXED);
+        world.run_to_end();
+        world
+    }
+
+    /// One screen of the demo at the fixed moment, as text.
+    fn render(world: &World, name: &str, w: u16, h: u16) -> String {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let opts = crate::Opts::new(std::path::PathBuf::from("/nonexistent"));
+        let mut app = App::new(&opts, false);
+        app.boot = false;
+        app.clock = Some(4_200);
+        app.hud.settle = true;
+        app.hud.frozen = Some(12.5);
+        match name {
+            "wall" => {}
+            "session" => {
+                app.view = View::Session;
+                app.session = Some(world.sessions[0].id.clone());
+            }
+            "hud" => app.view = View::Hud,
+            "hud-flat" => {
+                app.view = View::Hud;
+                app.hud.set_flat(true);
+            }
+            "city" => app.view = View::City,
+            "help" => app.help = true,
+            other => panic!("no screen named {other}"),
+        }
+        let mut term = Terminal::new(TestBackend::new(w, h)).expect("test terminal");
+        term.draw(|f| draw(f, &mut app, world)).expect("draw");
+        let buf = term.backend().buffer();
+        (0..h).map(|y| (0..w).map(|x| buf[(x, y)].symbol()).collect::<String>().trim_end().to_string() + "\n").collect()
+    }
+
+    fn is_dot(c: char) -> bool {
+        ('\u{2800}'..='\u{28ff}').contains(&c)
+    }
+
+    /// Compares `got` with its golden copy in tests/golden/. Text must match exactly. Braille dots
+    /// may move in a few cells: floating point is not bit-identical across systems.
+    fn check_golden(name: &str, got: &str) {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden").join(format!("{name}.txt"));
+        if std::env::var_os("UPDATE_GOLDEN").is_some() {
+            std::fs::create_dir_all(path.parent().expect("golden folder")).expect("create tests/golden");
+            std::fs::write(&path, got).expect("write golden copy");
+            return;
+        }
+        let want = std::fs::read_to_string(&path)
+            .unwrap_or_else(|_| panic!("{} is missing: run `UPDATE_GOLDEN=1 cargo test`, then read the new file before committing it", path.display()))
+            .replace('\r', "");
+        let (wl, gl): (Vec<&str>, Vec<&str>) = (want.lines().collect(), got.lines().collect());
+        let blank = |c: char| c == ' ' || c == '\u{2800}';
+        let (mut changed, mut dots, mut moved) = (Vec::new(), 0usize, 0usize);
+        for i in 0..wl.len().max(gl.len()) {
+            let (a, b): (Vec<char>, Vec<char>) = (wl.get(i).unwrap_or(&"").chars().collect(), gl.get(i).unwrap_or(&"").chars().collect());
+            let mut text_differs = false;
+            for k in 0..a.len().max(b.len()) {
+                let (x, y) = (a.get(k).copied().unwrap_or(' '), b.get(k).copied().unwrap_or(' '));
+                if is_dot(x) || is_dot(y) {
+                    dots += 1;
+                    if x != y {
+                        // A dot that moved, appeared or vanished is jitter; a dot that became text is not.
+                        if (is_dot(x) || blank(x)) && (is_dot(y) || blank(y)) {
+                            moved += 1;
+                        } else {
+                            text_differs = true;
+                        }
+                    }
+                } else if x != y {
+                    text_differs = true;
+                }
+            }
+            if text_differs {
+                changed.push(format!("  line {:>2}\n    golden: {}\n    now:    {}", i + 1, wl.get(i).unwrap_or(&""), gl.get(i).unwrap_or(&"")));
+            }
+        }
+        let allowed = (dots / 50).max(6);
+        if !changed.is_empty() || moved > allowed {
+            panic!(
+                "{name}: the screen changed ({} lines of text differ; {moved} of {dots} dot cells moved, {allowed} allowed).\n{}\n\n\
+                 If the change is intended: run `UPDATE_GOLDEN=1 cargo test`, read `git diff tests/golden`, and say in the commit why the screen changed.\n\
+                 If it is not: the last change broke this screen.",
+                changed.len(),
+                changed.into_iter().take(12).collect::<Vec<_>>().join("\n")
+            );
+        }
+    }
+
+    #[test]
+    fn screens_match_their_golden_copies() {
+        let world = demo_world();
+        for (w, h) in [(120, 36), (170, 50)] {
+            for name in ["wall", "session", "hud", "hud-flat", "city", "help"] {
+                check_golden(&format!("{name}-{w}x{h}"), &render(&world, name, w, h));
+            }
+        }
+    }
+
+    #[test]
+    fn readings_match_their_golden_copy() {
+        let mut world = demo_world();
+        check_golden("demo-dump", &dump(&mut world));
+    }
+
+    #[test]
+    fn every_screen_survives_small_and_odd_terminals() {
+        let world = demo_world();
+        for (w, h) in [(30, 10), (40, 12), (61, 17), (80, 24), (99, 30), (300, 90)] {
+            for name in ["wall", "session", "hud", "hud-flat", "city", "help"] {
+                let text = render(&world, name, w, h);
+                assert_eq!(text.lines().count(), h as usize, "{name} at {w}x{h} draws every row");
+            }
+        }
     }
 }

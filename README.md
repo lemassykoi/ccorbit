@@ -226,6 +226,7 @@ again shows once, with a count) announce:
 | `--claude-dir <DIR>` | Claude Code data directory, default `$CLAUDE_CONFIG_DIR`, or `.claude` in your home folder (`%USERPROFILE%` on Windows) |
 | `--no-boot` | Skip the boot animation |
 | `--dump` | Print every session and its readings as plain text, then exit |
+| `--help`, `--version` | Print the options, or the version, then exit |
 
 ## What it reads
 
@@ -258,8 +259,14 @@ message bodies, file contents or edited text. It never writes anything anywhere.
 
 ## Development
 
+The repository is set up so that a coding agent (or a person) can change it safely:
+[AGENTS.md](AGENTS.md) is the map, `docs/` holds the architecture, the promises and the checks that
+enforce them, the transcript format and the decisions, and one command checks everything:
+
 ```sh
-cargo test                     # parsing, lifecycles, readings, prices, the demo, HUD hit tests
+scripts/verify.sh              # formatting, lints, tests, golden screens, rules, budgets (CI runs it too)
+cargo test                     # while working
+UPDATE_GOLDEN=1 cargo test     # accept an intended screen change, then read git diff tests/golden
 cargo run --release -- --dump  # check the readings against your own sessions
 ```
 
@@ -280,6 +287,7 @@ cargo run --release -- --dump  # check the readings against your own sessions
 | `src/demo.rs` | The made-up sessions of `--demo`, written as transcript records |
 | `src/jump.rs` | Jumping to a session's terminal tab (opt-in) |
 | `src/theme.rs` | Palettes, gradients, fog and the 256-color fallback |
+| `src/time.rs` | Timestamps, durations and compact numbers |
 
 `docs/demo.tape` records `docs/demo.gif` with [vhs](https://github.com/charmbracelet/vhs).
 

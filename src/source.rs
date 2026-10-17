@@ -23,6 +23,8 @@ pub struct World {
     pub mode: Mode,
     /// Finished workflow runs of every project, oldest first.
     pub history: Vec<PastRun>,
+    /// A fixed clock instead of the real one, so tests see the same moment every time.
+    pub frozen: Option<i64>,
 }
 
 pub enum Mode {
@@ -81,6 +83,7 @@ impl World {
             now: now_ms(),
             history: load_history(&claude_dir),
             mode: Mode::Live(Live { claude_dir, tracks: Vec::new(), last_registry: None, last_dirs: None }),
+            frozen: None,
         }
     }
 
@@ -88,7 +91,14 @@ impl World {
     pub fn demo() -> World {
         let now = now_ms();
         let (demo, sessions, history) = Demo::start(now);
-        World { sessions, now, history, mode: Mode::Demo(demo) }
+        World { sessions, now, history, mode: Mode::Demo(demo), frozen: None }
+    }
+
+    /// The demo at a fixed moment that never moves: the same screens every time, for tests.
+    #[cfg(test)]
+    pub fn demo_at(now: i64) -> World {
+        let (demo, sessions, history) = Demo::start(now);
+        World { sessions, now, history, mode: Mode::Demo(demo), frozen: Some(now) }
     }
 
     pub fn is_demo(&self) -> bool {
@@ -136,19 +146,21 @@ impl World {
             now: start,
             history,
             mode: Mode::Replay(Replay { events, files, next: 0, sim: start as f64, last: Instant::now(), speed, paused: false }),
+            frozen: None,
         })
     }
 
     /// Reads whatever is new. Returns whether anything changed.
     pub fn tick(&mut self) -> bool {
+        let clock = self.frozen.unwrap_or_else(now_ms);
         match &mut self.mode {
             Mode::Live(live) => {
-                self.now = now_ms();
+                self.now = clock;
                 live_tick(live, &mut self.sessions, &mut self.history)
             }
             Mode::Replay(r) => replay_tick(r, &mut self.sessions, &mut self.now, false),
             Mode::Demo(d) => {
-                self.now = now_ms();
+                self.now = clock;
                 d.tick(self.now, &mut self.sessions, &mut self.history)
             }
         }
@@ -156,16 +168,17 @@ impl World {
 
     /// Loads everything available now: one live scan, or the whole replay.
     pub fn run_to_end(&mut self) {
+        let clock = self.frozen.unwrap_or_else(now_ms);
         match &mut self.mode {
             Mode::Live(live) => {
-                self.now = now_ms();
+                self.now = clock;
                 live_tick(live, &mut self.sessions, &mut self.history);
             }
             Mode::Replay(r) => {
                 replay_tick(r, &mut self.sessions, &mut self.now, true);
             }
             Mode::Demo(d) => {
-                self.now = now_ms();
+                self.now = clock;
                 d.tick(self.now, &mut self.sessions, &mut self.history);
             }
         }
@@ -199,21 +212,17 @@ impl Replay {
     }
 
     pub fn progress(&self) -> f64 {
-        if self.events.is_empty() {
-            1.0
-        } else {
-            self.next as f64 / self.events.len() as f64
-        }
+        if self.events.is_empty() { 1.0 } else { self.next as f64 / self.events.len() as f64 }
     }
 }
 
 fn live_tick(live: &mut Live, sessions: &mut Vec<Session>, history: &mut Vec<PastRun>) -> bool {
     let mut changed = false;
-    if live.last_registry.map_or(true, |t| t.elapsed() >= REGISTRY_EVERY) {
+    if live.last_registry.is_none_or(|t| t.elapsed() >= REGISTRY_EVERY) {
         changed |= scan_registry(live, sessions);
         live.last_registry = Some(Instant::now());
     }
-    let scan_dirs = live.last_dirs.map_or(true, |t| t.elapsed() >= DIRS_EVERY);
+    let scan_dirs = live.last_dirs.is_none_or(|t| t.elapsed() >= DIRS_EVERY);
     if scan_dirs {
         for (s, track) in sessions.iter_mut().zip(live.tracks.iter_mut()) {
             if s.alive {
@@ -455,10 +464,10 @@ fn index_file(path: &Path, agent: usize, files: &mut Vec<File>, events: &mut Vec
         }
         let line = buf.strip_suffix(b"\n").unwrap_or(&buf);
         let v = serde_json::from_slice::<Value>(line).ok();
-        if let (Some(c), Some(v)) = (cwd.as_deref_mut(), &v) {
-            if c.is_empty() {
-                c.push_str(str_of(v, "cwd"));
-            }
+        if let (Some(c), Some(v)) = (cwd.as_deref_mut(), &v)
+            && c.is_empty()
+        {
+            c.push_str(str_of(v, "cwd"));
         }
         let at = v.as_ref().and_then(|v| v.get("timestamp")).and_then(Value::as_str).and_then(parse_iso_ms).unwrap_or(last_at);
         last_at = at;
@@ -493,11 +502,7 @@ fn find_transcript(claude_dir: &Path, cwd: &str, sid: &str) -> PathBuf {
     if guess.exists() {
         return guess;
     }
-    read_dir_paths(&projects)
-        .into_iter()
-        .map(|p| p.join(format!("{sid}.jsonl")))
-        .find(|p| p.exists())
-        .unwrap_or(guess)
+    read_dir_paths(&projects).into_iter().map(|p| p.join(format!("{sid}.jsonl"))).find(|p| p.exists()).unwrap_or(guess)
 }
 
 fn read_dir_paths(dir: &Path) -> Vec<PathBuf> {
