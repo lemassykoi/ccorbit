@@ -3,10 +3,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 /// Parses the UTC timestamps Claude Code writes, such as `2026-10-02T23:56:06.584Z`.

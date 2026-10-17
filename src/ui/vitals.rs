@@ -96,9 +96,15 @@ pub fn reactor(s: &Session, now: i64, ms: u128, t: &Theme) -> Vec<Span<'static>>
     let Some(r) = s.cache_ratio(now, 60) else {
         return vec![Span::styled("◌ –", Style::new().fg(t.faint))];
     };
-    let color = if r >= 0.9 { t.ok } else if r >= 0.7 { t.warn } else { t.err };
+    let color = if r >= 0.9 {
+        t.ok
+    } else if r >= 0.7 {
+        t.warn
+    } else {
+        t.err
+    };
     let core = if flare {
-        let on = (ms / 160) % 2 == 0;
+        let on = (ms / 160).is_multiple_of(2);
         Span::styled("✺", Style::new().fg(if on { t.accent } else { t.hi }).add_modifier(Modifier::BOLD))
     } else {
         Span::styled("◉", Style::new().fg(color))
@@ -128,16 +134,16 @@ pub fn money_rate(s: &Session, now: i64) -> u64 {
 pub fn ctx_gauge(fc: &Forecast, width: usize, t: &Theme) -> Vec<Span<'static>> {
     let ratio = fc.ctx as f64 / fc.limit.max(1) as f64;
     let filled = ((ratio * width as f64).round() as usize).min(width);
-    let color = if ratio > 0.85 { t.err } else if ratio > 0.65 { t.warn } else { t.fg };
-    let mut v = vec![
-        Span::styled("█".repeat(filled), Style::new().fg(color)),
-        Span::styled("░".repeat(width - filled), Style::new().fg(t.faint)),
-    ];
+    let color = if ratio > 0.85 {
+        t.err
+    } else if ratio > 0.65 {
+        t.warn
+    } else {
+        t.fg
+    };
+    let mut v = vec![Span::styled("█".repeat(filled), Style::new().fg(color)), Span::styled("░".repeat(width - filled), Style::new().fg(t.faint))];
     match fc.calls.filter(|&c| c < 30.0) {
-        Some(c) => v.push(Span::styled(
-            format!(" ⟳~{:.0}", c.max(0.0)),
-            Style::new().fg(if c < 5.0 { t.err } else { t.warn }).add_modifier(Modifier::BOLD),
-        )),
+        Some(c) => v.push(Span::styled(format!(" ⟳~{:.0}", c.max(0.0)), Style::new().fg(if c < 5.0 { t.err } else { t.warn }).add_modifier(Modifier::BOLD))),
         None => v.push(Span::styled(format!(" {:>2}%", (ratio * 100.0) as u32), Style::new().fg(t.dim))),
     }
     v
@@ -145,12 +151,7 @@ pub fn ctx_gauge(fc: &Forecast, width: usize, t: &Theme) -> Vec<Span<'static>> {
 
 /// One line about the next compaction: the ceiling, how near it is, how many happened.
 pub fn compaction_text(s: &Session, fc: &Forecast, now: i64) -> String {
-    let mut out = format!(
-        "{} / {} {}",
-        fmt_n(fc.ctx),
-        fmt_n(fc.limit),
-        if fc.known { "ceiling (seen)" } else { "window (guessed)" }
-    );
+    let mut out = format!("{} / {} {}", fmt_n(fc.ctx), fmt_n(fc.limit), if fc.known { "ceiling (seen)" } else { "window (guessed)" });
     match (fc.calls, fc.secs) {
         (Some(c), Some(secs)) => out.push_str(&format!(" · in ~{c:.0} calls, ~{}", fmt_dur((secs * 1000.0) as i64))),
         (Some(c), None) => out.push_str(&format!(" · in ~{c:.0} calls")),
@@ -174,11 +175,7 @@ pub fn race_chip(r: &Race) -> String {
         d if d < -30_000 => format!("{} ahead", fmt_dur(-d)),
         _ => "on pace".into(),
     };
-    if r.eta >= 0 {
-        format!("△ {pace} · ETA {}", fmt_dur(r.eta))
-    } else {
-        format!("△ {} past the ghost", fmt_dur(-r.eta))
-    }
+    if r.eta >= 0 { format!("△ {pace} · ETA {}", fmt_dur(r.eta)) } else { format!("△ {} past the ghost", fmt_dur(-r.eta)) }
 }
 
 /// Two lanes on one time scale: this run (solid) and the earlier one (shaded), each phase in
@@ -190,8 +187,9 @@ pub fn race_lanes(r: &Race, phases: usize, width: usize, t: &Theme) -> Vec<Line<
     let lane = |spans: Vec<(usize, i64, i64)>, glyph: &str, mark: Option<usize>| -> Line<'static> {
         let mut cells: Vec<Span<'static>> = (0..width).map(|_| Span::styled("·", Style::new().fg(t.faint))).collect();
         for (p, a, b) in spans {
-            for c in col(a)..col(b).max(col(a) + 1).min(width) {
-                cells[c] = Span::styled(glyph.to_string(), Style::new().fg(shade(p)));
+            let (from, to) = (col(a), col(b).max(col(a) + 1).min(width));
+            for cell in cells.iter_mut().take(to).skip(from) {
+                *cell = Span::styled(glyph.to_string(), Style::new().fg(shade(p)));
             }
         }
         if let Some(m) = mark.filter(|&m| m < width) {
@@ -199,8 +197,7 @@ pub fn race_lanes(r: &Race, phases: usize, width: usize, t: &Theme) -> Vec<Line<
         }
         Line::from(cells)
     };
-    let live: Vec<(usize, i64, i64)> =
-        r.live.iter().enumerate().filter_map(|(p, s)| s.map(|(a, b)| (p, a, b.unwrap_or(r.elapsed)))).collect();
+    let live: Vec<(usize, i64, i64)> = r.live.iter().enumerate().filter_map(|(p, s)| s.map(|(a, b)| (p, a, b.unwrap_or(r.elapsed)))).collect();
     let ghost: Vec<(usize, i64, i64)> = r.ghost.spans.iter().enumerate().filter_map(|(p, s)| s.map(|(a, b)| (p, a, b))).collect();
     let now = (!r.finished).then(|| col(r.elapsed));
     vec![lane(live, "█", None), lane(ghost, "▒", now)]

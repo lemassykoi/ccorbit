@@ -21,9 +21,16 @@ const COLLIDE_MS: i64 = 15 * 60_000;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Warn {
     /// Running `factor` times its usual (median) duration.
-    Stall { factor: f64, usual: i64 },
-    Loop { count: usize },
-    Failing { count: usize },
+    Stall {
+        factor: f64,
+        usual: i64,
+    },
+    Loop {
+        count: usize,
+    },
+    Failing {
+        count: usize,
+    },
 }
 
 pub struct Alert {
@@ -102,7 +109,13 @@ pub fn alerts(world: &World) -> Vec<Alert> {
                 }
                 let (usual, p90) = (h.quantile(0.5), h.quantile(0.9));
                 if took >= 8 * usual && took >= 3 * p90 {
-                    out.push(Alert { si, agent: a, tool: st.id.clone(), label: st.name.clone(), warn: Warn::Stall { factor: took as f64 / usual as f64, usual } });
+                    out.push(Alert {
+                        si,
+                        agent: a,
+                        tool: st.id.clone(),
+                        label: st.name.clone(),
+                        warn: Warn::Stall { factor: took as f64 / usual as f64, usual },
+                    });
                 }
             }
             let Some(last) = steps.first() else { continue };
@@ -235,19 +248,7 @@ pub fn race<'a>(world: &'a World, s: &Session, w: usize) -> Option<Race<'a>> {
     }
     let live: Vec<Option<(i64, Option<i64>)>> = (0..n).map(|p| begin[p].map(|b| (b, if open[p] { None } else { end[p] }))).collect();
     let phase = live.iter().rposition(Option::is_some);
-    let delta = phase
-        .and_then(|p| Some(live[p]?.0 - ghost.spans.get(p).copied().flatten()?.0))
-        .unwrap_or(0);
+    let delta = phase.and_then(|p| Some(live[p]?.0 - ghost.spans.get(p).copied().flatten()?.0)).unwrap_or(0);
     let elapsed = done.unwrap_or(world.now) - started;
-    Some(Race {
-        ghost,
-        same_name,
-        runs: pool.len(),
-        elapsed,
-        phase,
-        live,
-        delta,
-        eta: ghost.dur + delta - elapsed,
-        finished: done.is_some(),
-    })
+    Some(Race { ghost, same_name, runs: pool.len(), elapsed, phase, live, delta, eta: ghost.dur + delta - elapsed, finished: done.is_some() })
 }

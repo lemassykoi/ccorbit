@@ -42,7 +42,10 @@ pub fn jump(pid: i64) -> Result<&'static str, &'static str> {
 fn focus_url(u: &str) -> bool {
     let Some((scheme, rest)) = u.split_once("://") else { return false };
     let Some(id) = rest.strip_prefix("session/") else { return false };
-    scheme.starts_with("warp") && scheme.chars().all(|c| c.is_ascii_lowercase()) && id.len() == 32 && id.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+    scheme.starts_with("warp")
+        && scheme.chars().all(|c| c.is_ascii_lowercase())
+        && id.len() == 32
+        && id.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
 }
 
 fn open(args: &[&str]) -> Result<(), &'static str> {
@@ -86,7 +89,14 @@ fn environ(pid: i64) -> Option<Vec<String>> {
     let rest = &rest[path_end..];
     let start = rest.iter().position(|&b| b != 0)?;
     let strings: Vec<String> = rest[start..].split(|&b| b == 0).map(|s| String::from_utf8_lossy(s).into_owned()).collect();
-    Some(strings.into_iter().skip(argc).take_while(|s| !s.is_empty()).filter(|s| s.starts_with("WARP_FOCUS_URL=") || s.starts_with("__CFBundleIdentifier=")).collect())
+    Some(
+        strings
+            .into_iter()
+            .skip(argc)
+            .take_while(|s| !s.is_empty())
+            .filter(|s| s.starts_with("WARP_FOCUS_URL=") || s.starts_with("__CFBundleIdentifier="))
+            .collect(),
+    )
 }
 
 #[cfg(not(target_os = "macos"))]

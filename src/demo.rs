@@ -85,8 +85,18 @@ const PHASES: [&str; 4] = ["Build", "Review", "Verify", "Fix"];
 enum Act {
     /// A transcript record for the main agent (`""`) or the agent with this id.
     Line(String, Value),
-    Agent { id: String, kind: &'static str, desc: String, tool: String },
-    WfAgent { run: String, id: String, label: String, phase: &'static str },
+    Agent {
+        id: String,
+        kind: &'static str,
+        desc: String,
+        tool: String,
+    },
+    WfAgent {
+        run: String,
+        id: String,
+        label: String,
+        phase: &'static str,
+    },
     Status(&'static str),
     WfDone(Value),
 }
@@ -154,7 +164,11 @@ impl Demo {
         }
         // The API session was compacted once at its ceiling: that is what its gauge counts down to.
         d.call(2, "", t0 - 900, "text", vec![], 300, 0, 2000, false);
-        d.push(t0 - 800, 2, Act::Line(String::new(), json!({"type": "system", "subtype": "compact_boundary", "compactMetadata": {"trigger": "auto", "preTokens": 968_000}})));
+        d.push(
+            t0 - 800,
+            2,
+            Act::Line(String::new(), json!({"type": "system", "subtype": "compact_boundary", "compactMetadata": {"trigger": "auto", "preTokens": 968_000}})),
+        );
         // The webapp session starts a workflow early, so a race is under way from the first frame.
         d.workflow(0, t0 + 200_000);
         let history = (0..3).map(|k| past_run(now - (k + 1) * 86_400_000, 345_000 + k * 20_000)).collect();
@@ -233,7 +247,13 @@ impl Demo {
     #[allow(clippy::too_many_arguments)]
     fn call(&mut self, si: usize, agent: &str, at: i64, kind: &str, tools: Vec<(String, &str, Value)>, out: u64, think: u64, ctx: u64, rebuild: bool) -> i64 {
         let msg = self.id("msg");
-        let model = if agent.is_empty() { PROFILES[si].model } else if agent.starts_with("ex") { "claude-haiku-5-5" } else { "claude-sonnet-5-5" };
+        let model = if agent.is_empty() {
+            PROFILES[si].model
+        } else if agent.starts_with("ex") {
+            "claude-haiku-5-5"
+        } else {
+            "claude-sonnet-5-5"
+        };
         let write = if rebuild { ctx.saturating_sub(4000) } else { self.between(800, 4000) as u64 };
         let usage = json!({
             "input_tokens": 3,
@@ -259,6 +279,7 @@ impl Demo {
         t
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn result(&mut self, si: usize, agent: &str, at: i64, tool: &str, text: &str, error: bool, tur: Value) {
         let line = json!({"type": "user", "toolUseResult": tur, "message": {"content": [{"type": "tool_result", "tool_use_id": tool, "content": text, "is_error": error}]}});
         self.push(at, si, Act::Line(agent.into(), line));
@@ -288,7 +309,11 @@ impl Demo {
         if self.ctx[si] > 962_000 {
             end += 2000;
             let pre = self.ctx[si];
-            self.push(end, si, Act::Line(String::new(), json!({"type": "system", "subtype": "compact_boundary", "compactMetadata": {"trigger": "auto", "preTokens": pre}})));
+            self.push(
+                end,
+                si,
+                Act::Line(String::new(), json!({"type": "system", "subtype": "compact_boundary", "compactMetadata": {"trigger": "auto", "preTokens": pre}})),
+            );
             self.ctx[si] = 70_000;
         }
         let pause = if self.chance(0.3) { self.between(8_000, 20_000) } else { self.between(1_500, 5_000) };
@@ -401,7 +426,8 @@ impl Demo {
             }
             at = phase_end + 1_000;
         }
-        let note = format!("<task-notification>\n<task-id>{task}</task-id>\n<tool-use-id>{tool}</tool-use-id>\n<status>completed</status>\n</task-notification>");
+        let note =
+            format!("<task-notification>\n<task-id>{task}</task-id>\n<tool-use-id>{tool}</tool-use-id>\n<status>completed</status>\n</task-notification>");
         self.push(at, si, Act::Line(String::new(), json!({"type": "queue-operation", "content": note})));
         let mut progress: Vec<Value> = PHASES.iter().enumerate().map(|(i, p)| json!({"type": "workflow_phase", "index": i + 1, "title": p})).collect();
         progress.extend(agents);
@@ -438,10 +464,7 @@ impl Demo {
 
     /// Calls to MCP servers: issues on GitHub, a ticket on Linear.
     fn mcp(&mut self, si: usize, mut t: i64) -> i64 {
-        for (name, input) in [
-            ("mcp__github__search_issues", json!({"query": "checkout is:open"})),
-            ("mcp__linear__get_issue", json!({"id": "ENG-412"})),
-        ] {
+        for (name, input) in [("mcp__github__search_issues", json!({"query": "checkout is:open"})), ("mcp__linear__get_issue", json!({"id": "ENG-412"}))] {
             let tool = self.id("toolu");
             let ctx = self.grow(si, "");
             let at = t + self.between(1_500, 4_000);

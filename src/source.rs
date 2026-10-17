@@ -199,21 +199,17 @@ impl Replay {
     }
 
     pub fn progress(&self) -> f64 {
-        if self.events.is_empty() {
-            1.0
-        } else {
-            self.next as f64 / self.events.len() as f64
-        }
+        if self.events.is_empty() { 1.0 } else { self.next as f64 / self.events.len() as f64 }
     }
 }
 
 fn live_tick(live: &mut Live, sessions: &mut Vec<Session>, history: &mut Vec<PastRun>) -> bool {
     let mut changed = false;
-    if live.last_registry.map_or(true, |t| t.elapsed() >= REGISTRY_EVERY) {
+    if live.last_registry.is_none_or(|t| t.elapsed() >= REGISTRY_EVERY) {
         changed |= scan_registry(live, sessions);
         live.last_registry = Some(Instant::now());
     }
-    let scan_dirs = live.last_dirs.map_or(true, |t| t.elapsed() >= DIRS_EVERY);
+    let scan_dirs = live.last_dirs.is_none_or(|t| t.elapsed() >= DIRS_EVERY);
     if scan_dirs {
         for (s, track) in sessions.iter_mut().zip(live.tracks.iter_mut()) {
             if s.alive {
@@ -455,10 +451,10 @@ fn index_file(path: &Path, agent: usize, files: &mut Vec<File>, events: &mut Vec
         }
         let line = buf.strip_suffix(b"\n").unwrap_or(&buf);
         let v = serde_json::from_slice::<Value>(line).ok();
-        if let (Some(c), Some(v)) = (cwd.as_deref_mut(), &v) {
-            if c.is_empty() {
-                c.push_str(str_of(v, "cwd"));
-            }
+        if let (Some(c), Some(v)) = (cwd.as_deref_mut(), &v)
+            && c.is_empty()
+        {
+            c.push_str(str_of(v, "cwd"));
         }
         let at = v.as_ref().and_then(|v| v.get("timestamp")).and_then(Value::as_str).and_then(parse_iso_ms).unwrap_or(last_at);
         last_at = at;
@@ -493,11 +489,7 @@ fn find_transcript(claude_dir: &Path, cwd: &str, sid: &str) -> PathBuf {
     if guess.exists() {
         return guess;
     }
-    read_dir_paths(&projects)
-        .into_iter()
-        .map(|p| p.join(format!("{sid}.jsonl")))
-        .find(|p| p.exists())
-        .unwrap_or(guess)
+    read_dir_paths(&projects).into_iter().map(|p| p.join(format!("{sid}.jsonl"))).find(|p| p.exists()).unwrap_or(guess)
 }
 
 fn read_dir_paths(dir: &Path) -> Vec<PathBuf> {

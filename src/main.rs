@@ -65,10 +65,25 @@ fn parse_args() -> Result<Opts, String> {
     let claude_dir = match std::env::var_os("CLAUDE_CONFIG_DIR") {
         Some(d) => PathBuf::from(d),
         // `HOME` on macOS and Linux, `USERPROFILE` on Windows.
-        None => PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).ok_or("neither HOME nor USERPROFILE is set")?)
-            .join(".claude"),
+        None => {
+            PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).ok_or("neither HOME nor USERPROFILE is set")?).join(".claude")
+        }
     };
-    let mut o = Opts { claude_dir, replay: None, speed: 20.0, theme: 0, boot: true, dump: false, snapshot: None, hud: false, director: false, demo: false, allow_jump: false, fps: 30, snapshot_html: None };
+    let mut o = Opts {
+        claude_dir,
+        replay: None,
+        speed: 20.0,
+        theme: 0,
+        boot: true,
+        dump: false,
+        snapshot: None,
+        hud: false,
+        director: false,
+        demo: false,
+        allow_jump: false,
+        fps: 30,
+        snapshot_html: None,
+    };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -81,13 +96,7 @@ fn parse_args() -> Result<Opts, String> {
                 std::process::exit(0);
             }
             "--replay" => o.replay = Some(args.next().ok_or("--replay needs a transcript path")?.into()),
-            "--speed" => {
-                o.speed = args
-                    .next()
-                    .and_then(|s| s.parse().ok())
-                    .filter(|s: &f64| *s > 0.0)
-                    .ok_or("--speed needs a positive number")?
-            }
+            "--speed" => o.speed = args.next().and_then(|s| s.parse().ok()).filter(|s: &f64| *s > 0.0).ok_or("--speed needs a positive number")?,
             "--theme" => {
                 let name = args.next().ok_or("--theme needs a name")?;
                 o.theme = theme::index(&name).ok_or_else(|| format!("unknown theme: {name}"))?;
@@ -98,9 +107,7 @@ fn parse_args() -> Result<Opts, String> {
             "--director" => o.director = true,
             "--demo" => o.demo = true,
             "--allow-jump" => o.allow_jump = true,
-            "--fps" => {
-                o.fps = args.next().and_then(|s| s.parse().ok()).filter(|n: &u32| (1..=120).contains(n)).ok_or("--fps needs a number from 1 to 120")?
-            }
+            "--fps" => o.fps = args.next().and_then(|s| s.parse().ok()).filter(|n: &u32| (1..=120).contains(n)).ok_or("--fps needs a number from 1 to 120")?,
             "--jump-check" => {}
             "--bench-hud" => {
                 args.next();

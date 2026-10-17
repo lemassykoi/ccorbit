@@ -98,6 +98,9 @@ impl Step {
     }
 }
 
+// Nearly every item is a step, so boxing the large variant would add an allocation per step and
+// save nothing.
+#[allow(clippy::large_enum_variant)]
 pub enum Item {
     Prompt { at: i64, text: String },
     Step(Step),
@@ -430,11 +433,7 @@ impl Activity {
             .rev()
             .map(|k| {
                 let b = nb - k;
-                if b > self.head || self.head - b >= BUCKETS as i64 {
-                    0
-                } else {
-                    self.buckets[b.rem_euclid(BUCKETS as i64) as usize]
-                }
+                if b > self.head || self.head - b >= BUCKETS as i64 { 0 } else { self.buckets[b.rem_euclid(BUCKETS as i64) as usize] }
             })
             .collect()
     }
@@ -641,17 +640,17 @@ impl Session {
             "assistant" => self.on_assistant(a, &v["message"], at),
             "user" => self.on_user(a, &v, at),
             "attachment" => {
-                if let Some(p) = v["attachment"].get("prompt").and_then(Value::as_str) {
-                    if p.contains("<task-notification>") {
-                        self.on_notifications(p, at);
-                    }
+                if let Some(p) = v["attachment"].get("prompt").and_then(Value::as_str)
+                    && p.contains("<task-notification>")
+                {
+                    self.on_notifications(p, at);
                 }
             }
             "queue-operation" => {
-                if let Some(c) = v.get("content").and_then(Value::as_str) {
-                    if c.contains("<task-notification>") {
-                        self.on_notifications(c, at);
-                    }
+                if let Some(c) = v.get("content").and_then(Value::as_str)
+                    && c.contains("<task-notification>")
+                {
+                    self.on_notifications(c, at);
                 }
             }
             "system" if a == 0 && v.get("subtype").and_then(Value::as_str) == Some("compact_boundary") => {
@@ -690,10 +689,10 @@ impl Session {
 
     fn on_assistant(&mut self, a: usize, msg: &Value, at: i64) {
         let ag = &mut self.agents[a];
-        if let Some(m) = msg.get("model").and_then(Value::as_str) {
-            if !m.starts_with('<') {
-                ag.model = m.to_string();
-            }
+        if let Some(m) = msg.get("model").and_then(Value::as_str)
+            && !m.starts_with('<')
+        {
+            ag.model = m.to_string();
         }
         if a != 0 && msg.get("stop_reason").and_then(Value::as_str) == Some("end_turn") {
             ag.done = true;
@@ -886,14 +885,9 @@ impl Session {
         st.error = error;
         st.result = parse::clip(parse::first_line(text), 300);
         let task = match st.kind {
-            Kind::Agent if tur.get("isAsync").and_then(Value::as_bool) == Some(true) => {
-                tur.get("agentId").and_then(Value::as_str)
-            }
+            Kind::Agent if tur.get("isAsync").and_then(Value::as_bool) == Some(true) => tur.get("agentId").and_then(Value::as_str),
             Kind::Workflow => parse::word_after(text, "Task ID: "),
-            Kind::Shell => tur
-                .get("backgroundTaskId")
-                .and_then(Value::as_str)
-                .or_else(|| parse::word_after(text, "running in background with ID: ")),
+            Kind::Shell => tur.get("backgroundTaskId").and_then(Value::as_str).or_else(|| parse::word_after(text, "running in background with ID: ")),
             _ => None,
         }
         .map(str::to_string);
@@ -980,14 +974,7 @@ impl Session {
             let Some(st) = tool.as_deref().or_else(|| self.tasks.get(&task).map(String::as_str)).and_then(|t| self.step_by_tool(t)) else { continue };
             let (label, summary) = st.label();
             let (kind, failed, id) = (st.kind, st.failed(), st.id.clone());
-            self.push_feed(FeedItem {
-                at,
-                feed: if failed { Feed::Failed } else { Feed::Done },
-                kind: Some(kind),
-                label,
-                text: summary,
-                tool: Some(id),
-            });
+            self.push_feed(FeedItem { at, feed: if failed { Feed::Failed } else { Feed::Done }, kind: Some(kind), label, text: summary, tool: Some(id) });
         }
     }
 
@@ -995,19 +982,17 @@ impl Session {
     pub fn on_workflow_json(&mut self, v: &Value) {
         let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
         let (run_id, task_id) = (s("runId"), s("taskId"));
-        let found = self.workflows.iter().position(|w| {
-            (!run_id.is_empty() && w.run_id == run_id) || (!task_id.is_empty() && w.task_id == task_id)
-        });
+        let found = self.workflows.iter().position(|w| (!run_id.is_empty() && w.run_id == run_id) || (!task_id.is_empty() && w.task_id == task_id));
         let w = match found {
             Some(w) => w,
             None => {
                 let step = self.tasks.get(&task_id).cloned();
                 let w = self.workflows.len();
                 self.workflows.push(Workflow::new(s("workflowName"), Vec::new(), step.clone()));
-                if let Some((a, i)) = step.and_then(|t| self.index.get(&t).copied()) {
-                    if let Some(Item::Step(st)) = self.agents[a].items.get_mut(i) {
-                        st.workflow.get_or_insert(w);
-                    }
+                if let Some((a, i)) = step.and_then(|t| self.index.get(&t).copied())
+                    && let Some(Item::Step(st)) = self.agents[a].items.get_mut(i)
+                {
+                    st.workflow.get_or_insert(w);
                 }
                 w
             }
@@ -1057,17 +1042,15 @@ impl Session {
         let step = wf.step.clone();
         let status = wf.status.clone();
         if finished {
-            let end = v.get("startTime").and_then(Value::as_i64).unwrap_or(0)
-                + v.get("durationMs").and_then(Value::as_i64).unwrap_or(0);
-            if let Some((a, i)) = step.and_then(|t| self.index.get(&t).copied()) {
-                if let Some(Item::Step(st)) = self.agents[a].items.get_mut(i) {
-                    if st.ended.is_some() {
-                        let bg = st.bg.get_or_insert_with(|| Bg { task_id: String::new(), done: None, status: String::new() });
-                        if bg.done.is_none() {
-                            bg.done = Some(end.max(st.started));
-                            bg.status = status;
-                        }
-                    }
+            let end = v.get("startTime").and_then(Value::as_i64).unwrap_or(0) + v.get("durationMs").and_then(Value::as_i64).unwrap_or(0);
+            if let Some((a, i)) = step.and_then(|t| self.index.get(&t).copied())
+                && let Some(Item::Step(st)) = self.agents[a].items.get_mut(i)
+                && st.ended.is_some()
+            {
+                let bg = st.bg.get_or_insert_with(|| Bg { task_id: String::new(), done: None, status: String::new() });
+                if bg.done.is_none() {
+                    bg.done = Some(end.max(st.started));
+                    bg.status = status;
                 }
             }
         }
@@ -1076,10 +1059,11 @@ impl Session {
     /// Records a read or a change of a file. From an edit's result only the counts of added and
     /// removed lines are kept; file contents and edited text are never stored.
     fn touch(&mut self, path: &str, tool: &str, a: usize, tur: &Value, at: i64) {
-        if !self.files.contains_key(path) && self.files.len() >= FILES_KEPT {
-            if let Some(old) = self.files.iter().min_by_key(|(_, f)| f.last()).map(|(k, _)| k.clone()) {
-                self.files.remove(&old);
-            }
+        if !self.files.contains_key(path)
+            && self.files.len() >= FILES_KEPT
+            && let Some(old) = self.files.iter().min_by_key(|(_, f)| f.last()).map(|(k, _)| k.clone())
+        {
+            self.files.remove(&old);
         }
         let f = self.files.entry(path.to_string()).or_default();
         if tool == "Read" {
@@ -1196,16 +1180,13 @@ impl Session {
     /// Working: a busy main loop, a step waiting for its result, or a background agent or
     /// workflow. Background shell commands (dev servers, watchers) alone do not count.
     pub fn busy(&self) -> bool {
-        self.alive
-            && (self.status == "busy"
-                || self.steps().any(|(_, s)| s.ended.is_none() || (s.running() && s.kind != Kind::Shell)))
+        self.alive && (self.status == "busy" || self.steps().any(|(_, s)| s.ended.is_none() || (s.running() && s.kind != Kind::Shell)))
     }
 
     /// Waiting on the person: a question or a plan to approve is open.
     pub fn needs_you(&self) -> bool {
         self.alive
-            && (self.status.contains("wait")
-                || self.steps().any(|(_, s)| s.ended.is_none() && matches!(s.name.as_str(), "AskUserQuestion" | "ExitPlanMode")))
+            && (self.status.contains("wait") || self.steps().any(|(_, s)| s.ended.is_none() && matches!(s.name.as_str(), "AskUserQuestion" | "ExitPlanMode")))
     }
 
     /// Registry name suffix (`projects-63` -> `63`), to tell apart sessions in the same folder.
@@ -1329,10 +1310,7 @@ impl Session {
         if !self.alive {
             return HashSet::new();
         }
-        self.steps()
-            .filter(|(_, s)| s.kind == Kind::Mcp && s.ended.is_none())
-            .map(|(_, s)| parse::mcp_parts(&s.name).0.to_string())
-            .collect()
+        self.steps().filter(|(_, s)| s.kind == Kind::Mcp && s.ended.is_none()).map(|(_, s)| parse::mcp_parts(&s.name).0.to_string()).collect()
     }
 
     pub fn collapsed(&self, a: usize) -> bool {
@@ -1341,16 +1319,12 @@ impl Session {
 
     pub fn phase_open(&self, w: usize, p: usize) -> bool {
         let wf = &self.workflows[w];
-        wf.open.get(p).copied().flatten().unwrap_or_else(|| {
-            wf.live.iter().any(|&a| wf.phase_of(&self.agents[a].wf_phase) == Some(p) && self.agent_running(a))
-        })
+        wf.open.get(p).copied().flatten().unwrap_or_else(|| wf.live.iter().any(|&a| wf.phase_of(&self.agents[a].wf_phase) == Some(p) && self.agent_running(a)))
     }
 
     pub fn wf_expanded(&self, w: usize) -> bool {
         let wf = &self.workflows[w];
-        wf.expanded.unwrap_or_else(|| {
-            wf.step.as_deref().and_then(|t| self.step_by_tool(t)).is_some_and(|s| s.running() && self.alive)
-        })
+        wf.expanded.unwrap_or_else(|| wf.step.as_deref().and_then(|t| self.step_by_tool(t)).is_some_and(|s| s.running() && self.alive))
     }
 
     pub fn set_all_expanded(&mut self, open: bool) {
@@ -1401,15 +1375,7 @@ impl PastRun {
                 *slot = Some((lo.min(a), hi.max(b)));
             }
         }
-        Some(PastRun {
-            run_id: s("runId"),
-            name: s("workflowName"),
-            phases,
-            start,
-            dur,
-            status: s("status"),
-            spans,
-        })
+        Some(PastRun { run_id: s("runId"), name: s("workflowName"), phases, start, dur, status: s("status"), spans })
     }
 }
 
@@ -1433,7 +1399,10 @@ mod tests {
             {"type":"tool_use","id":"t3","name":"mcp__claude_ai_Notion__notion-search","input":{"query":"x"}}
         ]}})));
         // the same message split over another record repeats its usage
-        s.ingest(0, &line(serde_json::json!({"type":"assistant","timestamp":t,"message":{"id":"m1","usage":{"input_tokens":10,"output_tokens":7},"content":[]}})));
+        s.ingest(
+            0,
+            &line(serde_json::json!({"type":"assistant","timestamp":t,"message":{"id":"m1","usage":{"input_tokens":10,"output_tokens":7},"content":[]}})),
+        );
         assert_eq!(s.agents[0].tokens().output, 7);
 
         let a = s.add_agent("ag1", "Explore", "Audit", Some("t2".into()));
@@ -1466,7 +1435,10 @@ mod tests {
         for (tid, name, input) in tools {
             content.push(serde_json::json!({"type":"tool_use","id":tid,"name":name,"input":input}));
         }
-        s.ingest(a, &line(serde_json::json!({"type":"assistant","timestamp":ts(sec),"message":{"id":id,"model":"claude-sonnet-4-5","usage":usage,"content":content}})));
+        s.ingest(
+            a,
+            &line(serde_json::json!({"type":"assistant","timestamp":ts(sec),"message":{"id":id,"model":"claude-sonnet-4-5","usage":usage,"content":content}})),
+        );
     }
 
     fn result(s: &mut Session, a: usize, sec: i64, tid: &str, tur: serde_json::Value) {
@@ -1499,7 +1471,10 @@ mod tests {
         // 5 fresh at 3 + 30k 1h writes at 6 + 1k reads at 0.3 + 50 out at 15, per million.
         assert_eq!(s.cost_micros, (5.0f64 * 3.0 + 30_000.0 * 6.0 + 1_000.0 * 0.3 + 50.0 * 15.0).round() as u64);
 
-        s.ingest(0, &line(serde_json::json!({"type":"system","subtype":"compact_boundary","timestamp":ts(50),"compactMetadata":{"trigger":"auto","preTokens":180000}})));
+        s.ingest(
+            0,
+            &line(serde_json::json!({"type":"system","subtype":"compact_boundary","timestamp":ts(50),"compactMetadata":{"trigger":"auto","preTokens":180000}})),
+        );
         assert_eq!(s.compactions[0].pre, 180_000);
         assert!(!s.forecast(None).known);
         assert_eq!(s.forecast(Some(180_000)).limit, 180_000);
@@ -1520,7 +1495,14 @@ mod tests {
         let a = s.add_wf_agent("wf_1", "ag1", "build:x", "Build");
         let script = "export const meta = {\n  name: 'demo',\n  phases: [{ title: 'Build' }, { title: 'Review' }],\n}";
         call(&mut s, 0, 1, "m1", "tool_use", serde_json::json!({"output_tokens":1}), &[("w1", "Workflow", serde_json::json!({"script": script}))]);
-        result_text(&mut s, 0, 2, "w1", serde_json::json!({"status":"async_launched","taskId":"t1","runId":"wf_1"}), "Workflow launched in background. Task ID: t1");
+        result_text(
+            &mut s,
+            0,
+            2,
+            "w1",
+            serde_json::json!({"status":"async_launched","taskId":"t1","runId":"wf_1"}),
+            "Workflow launched in background. Task ID: t1",
+        );
         assert_eq!(s.workflows[0].live, vec![a]);
         assert!(s.agent_running(a));
         call(&mut s, a, 3, "m2", "tool_use", serde_json::json!({"output_tokens":1}), &[("so", "StructuredOutput", serde_json::json!({}))]);
