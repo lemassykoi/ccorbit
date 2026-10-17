@@ -208,10 +208,10 @@ again shows once, with a count) announce:
 | Option | Effect |
 |---|---|
 | `--hud` | Start on the hologram |
-| `--demo` | Show made-up sessions instead of yours: to try it, or to record it without showing your work |
-| `--fps <N>` | Frames per second of the hologram, default 30 (60 costs about 5% CPU) |
-| `--allow-jump` | Let `o` bring forward the terminal tab of a session (runs `open`; see [Jump to a session](#jump-to-a-session)) |
 | `--director` | Start on the hologram with the director at the camera |
+| `--fps <N>` | Frames per second of the hologram, default 30 (60 costs about 5% CPU) |
+| `--demo` | Show made-up sessions instead of yours: to try it, or to record it without showing your work |
+| `--allow-jump` | Let `o` bring forward the terminal tab of a session (runs `open`; see [Jump to a session](#jump-to-a-session)) |
 | `--replay <FILE>` | Play back a recorded transcript (`~/.claude/projects/<project>/<session>.jsonl`) |
 | `--speed <N>` | Replay speed, default 20 (idle stretches are skipped) |
 | `--theme <NAME>` | `phosphor` (default), `amber` or `neon` |
@@ -245,6 +245,8 @@ message bodies, file contents or edited text. It never writes anything anywhere.
 - Agents of a workflow that had already finished when ccorbit started come from the run's record,
   without their steps.
 - A background task launched before the current Claude Code process started is shown as lost.
+- Jumping to a session works on macOS only, and reaches the exact tab in Warp only (other
+  terminals give no focus link, so ccorbit brings the app forward).
 
 ## Development
 
@@ -271,14 +273,26 @@ cargo run --release -- --dump  # check the readings against your own sessions
 | `src/jump.rs` | Jumping to a session's terminal tab (opt-in) |
 | `src/theme.rs` | Palettes, gradients, fog and the 256-color fallback |
 
-`docs/demo.tape` records `docs/demo.gif` with [vhs](https://github.com/charmbracelet/vhs). Releases
-are built by [dist](https://axodotdev.github.io/cargo-dist/): pushing a version tag (`v0.2.0`)
-builds the binaries, the installer and the Homebrew formula.
+`docs/demo.tape` records `docs/demo.gif` with [vhs](https://github.com/charmbracelet/vhs).
 
-Two hidden options help check the layout without a terminal:
+Hidden options for checking things without a terminal:
 
 - `--snapshot WxH` prints one frame of each view as text.
 - `--snapshot-html WxH DIR` writes colored HTML frames you can open in a browser.
+- `--bench-hud WxH` draws 300 frames of the hologram and reports the time each took.
+- `--jump-check` says how `o` would reach each running session, without doing it.
+
+### Releasing
+
+Releases are built by [dist](https://axodotdev.github.io/cargo-dist/) from a version tag:
+
+1. Set the version in `Cargo.toml`, move the changes in `CHANGELOG.md` under it, commit to `main`.
+2. Tag and push: `git tag -a v0.2.0 -m "ccorbit 0.2.0" && git push origin v0.2.0`. The release
+   workflow builds the archives, the installer and the Homebrew formula (`ccorbit.rb`) and
+   publishes them as a GitHub release.
+3. Copy `ccorbit.rb` from the release into `Formula/` of
+   [pcangemi/homebrew-tap](https://github.com/pcangemi/homebrew-tap) and push it.
+4. Publish to crates.io from the tag: `cargo publish`.
 
 ## License
 
