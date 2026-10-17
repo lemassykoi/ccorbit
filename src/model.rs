@@ -498,7 +498,9 @@ pub struct Session {
     pub compactions: Vec<Compaction>,
     /// Context size after each call of the main agent since the last compaction.
     pub ctx_samples: VecDeque<(i64, u64)>,
-    pub files: HashMap<String, FileStat>,
+    /// Ordered, so that whatever lists files (the code city, collisions) comes out the same way
+    /// every time.
+    pub files: BTreeMap<String, FileStat>,
     /// How long finished calls took, by kind, to tell when a running one is unusually slow.
     pub durations: HashMap<String, Hist>,
     pub last_at: i64,
@@ -545,7 +547,7 @@ impl Session {
             unpriced: 0,
             compactions: Vec::new(),
             ctx_samples: VecDeque::new(),
-            files: HashMap::new(),
+            files: BTreeMap::new(),
             durations: HashMap::new(),
             last_at: 0,
             proc_started: 0,

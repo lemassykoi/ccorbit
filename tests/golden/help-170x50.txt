@@ -1,0 +1,50 @@
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h                 activity ▄▄▄·▅▅▇▇█·▅▇▇▇▇▅▄▅▇▅▂▅▄·
+╔ ⠦ webapp·12 ═════════════════════════════════ BUSY  ╗ ╭ ⠦ webapp·47 ───────────────────────────────── BUSY  ╮ ╭ ● api ─────────────────────────────────────── IDLE  ╮
+║Checkout redesign                                    ║▌│Server-side rendering                                │▌│Rate limiter per tenant                              │▌
+║⠦ model      thinking or writing the next step   1.3s║▌│⠦ model      thinking or writing the next step   2.1s│▌│✓ Read …/api/main.go                          13s ago│▌
+║✖ checkout.tsx  △ on pace · ETA 3m29s  ◆ 3 running of║▌│✖ checkout.tsx  ◆ 1 agent  ⇄ github, linear          │▌│◆ 2 agents  ✦ 1 skill  ⇄ github, linear              │▌
+║⇡ 3.2M/m ⇣  16k/m ·▸····▸····▸····▸····▸·· ██░░░░ 36%║▌│⇡ 2.9M/m ⇣ 3.7k/m ·▸····▸····▸····▸····▸·· ███░░░ 50%│▌│⇡ 4.7M/m ⇣ 8.0k/m ·▸····▸····▸····▸····▸·· ██████ 96%│▌
+║⠤⠞⠳⠤⠴⠛⢦⡴⠋⢳⣠⠖⠲⣄⡖⠛⢦⡴⠒⢦⣠⠞⠳⣤⠞⠓⣆⡴⠛⠦⠤ ◉ 96% ≈$9.55 opus-5-5║▌│⣤⠞⠳⣤⠞⠓⢦⡴⠛⢦⡴⠒⠲⣤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠞⠳⣄⡼⠙⠦⠤ ◉ 95% ≈$7.61 opus-5-5│▌│⠞⠳⠤⠞⠳⣄⡴⠛⢦⡴⠛⠲⣤⠞⠳⣄⡞⠙⢦⡴⠋⢧⣠⠏⠳⣤⠞⠙⠦⠤ ◉ 96% ≈$14.09 opus-5-5│▌
+║› run the tests and fix what breaks                  ║▌│› cache rendered pages for a minute                  │▌│› make the limiter per tenant                        │▌
+╚═════════════════════════════════════════════════════╝▌╰─────────────────────────────────────────────────────╯▌╰─────────────────────────────────────────────────────╯▌
+ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+                                                        ╭ ⠦ docs-site ───────────────────────────────── BUSY  ╮
+                                                        │Docs search                                          │▌
+                                  ╔ ? HELP · any key closes ══════════════════════════════════════════════════════════════════════════╗
+                                  ║ VIEWS   wall start   ⏎ session tree   g HUD hologram   c code city   esc back                     ║▌
+                                  ║ MOVE    ←↑↓→ or hjkl select   tab next session or target   ⏎ open or fold                         ║▌
+                                  ║         e expand all   f follow newest, or fly to target   0 reset the HUD view                   ║▌
+                                  ║ LOOK    t theme   x effects   m mouse off, to select text   q quit                                ║▌
+                                  ║ JUMP    o bring the session's terminal tab forward (start with --allow-jump)                      ║▌
+                                  ║ MOUSE   click selects · click again opens · wheel scrolls or zooms · drag pans                    ║▌
+╭ ◢ SKYLINE · height = tokens per ║ HUD     drag turn   v flat or 3D   d director (the camera runs itself)   space ping               ║▌────────────────────────────────╮
+│                                 ║ CITY    [ ] time window   ⏎ open the session that touched the file last                           ║▌                                │▌
+│                                 ║ REPLAY  p pause   < > slower, faster                                                              ║▌                                │▌
+│                                 ║                                                                                                   ║▌                                │▌
+│                                 ║ STEPS   ⠋ running  ⠋ background  ✓ done  ✗ failed  ■ stopped  ◌ never finished                    ║▌                                │▌
+│                                 ║ CARDS   ◆ agents  ↻ background tasks  ✦ skills  ⇄ MCP servers  ⚑ waiting for you                  ║▌                                │▌
+│                                 ║ FLOW    ⇡ sent per minute, cache included  ⇣ generated  ██░ context vs ceiling  ⟳~12 calls left   ║▌                                │▌
+│                                 ║ VITALS  ⠔⠉⠢ thinking  ⠔⠉⠢ writing  ⠔⠉⠢ tools  ◉ 97% cache hits  ✺ cache rebuilt  ≈$ API-equivalent║▌                                │▌
+│▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔║ ALERTS  ⚠ call far slower than usual, or repeated  ✖ one file, two sessions  △ race vs an earlier ║▌▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔│▌
+│                                 ║ GRAPH   ◎ core  ○ session  ◇ agent  △ workflow  ⬡ MCP server  ✳ skill                             ║▌                                │▌
+│                                 ║         • prompt in  • call out  • result back  • failed  • token traffic                         ║▌                                │▌
+╰─────────────────────────────────║                                                                                                   ║▌────────────────────────────────╯▌
+ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀║ COLORS  a session keeps one color on its card, tower, feed lines and HUD node                     ║▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+╭ ▸ SIGNAL FEED ──────────────────║ DATA    read-only: ~/.claude sessions, transcripts, subagents, workflows · no network             ║▌────────────────── all sessions ╮
+│    27s ▌api              ✓ Edit ║                                                                                                   ║▌                                │▌
+│    23s ▌webapp·12        ✓ WebSe║                                                                                                   ║▌                                │▌
+│    21s ▌docs-site        ✓ Grep ╚═══════════════════════════════════════════════════════════════════════════════════════════════════╝▌                                │▌
+│    21s ▌api              ✓ Edit  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘                                │▌
+│    20s ▌webapp·12        ✓ Skill      webapp-testing                                                                                                                  │▌
+│    19s ▌webapp·47        ✓ Bash       Run the tests                                                                                                                   │▌
+│    18s ▌api              ✓ Read       …/store/redis.go                                                                                                                │▌
+│    15s ▌webapp·12        ✓ Bash       Run the tests                                                                                                                   │▌
+│    14s ▌api              ✓ Read       …/api/main.go                                                                                                                   │▌
+│   9.3s ▌webapp·12        ✓ Structure…                                                                                                                                 │▌
+│   6.4s ▌docs-site        ✓ github     search_issues · checkout is:open                                                                                                │▌
+│   6.2s ▌webapp·12        ✓ Edit       …/lib/pricing.ts                                                                                                                │▌
+│   3.2s ▌webapp·12        ✓ Edit       …/components/CartSummary.tsx                                                                                                    │▌
+│   1.9s ▌docs-site        ⠦ linear     get_issue · ENG-412                                                                                                             │▌
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯▌
+ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+ ←↑↓→  select   ⏎  open   g  hud   c  city   t  theme   x  effects   q  quit                                                                            ?  help  phosphor

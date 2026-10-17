@@ -61,6 +61,27 @@ pub struct Opts {
     pub snapshot_html: Option<(u16, u16, PathBuf)>,
 }
 
+impl Opts {
+    /// The defaults, before any option is read.
+    pub fn new(claude_dir: PathBuf) -> Opts {
+        Opts {
+            claude_dir,
+            replay: None,
+            speed: 20.0,
+            theme: 0,
+            boot: true,
+            dump: false,
+            snapshot: None,
+            hud: false,
+            director: false,
+            demo: false,
+            allow_jump: false,
+            fps: 30,
+            snapshot_html: None,
+        }
+    }
+}
+
 fn parse_args() -> Result<Opts, String> {
     let claude_dir = match std::env::var_os("CLAUDE_CONFIG_DIR") {
         Some(d) => PathBuf::from(d),
@@ -69,21 +90,7 @@ fn parse_args() -> Result<Opts, String> {
             PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).ok_or("neither HOME nor USERPROFILE is set")?).join(".claude")
         }
     };
-    let mut o = Opts {
-        claude_dir,
-        replay: None,
-        speed: 20.0,
-        theme: 0,
-        boot: true,
-        dump: false,
-        snapshot: None,
-        hud: false,
-        director: false,
-        demo: false,
-        allow_jump: false,
-        fps: 30,
-        snapshot_html: None,
-    };
+    let mut o = Opts::new(claude_dir);
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {

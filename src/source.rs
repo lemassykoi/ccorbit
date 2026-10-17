@@ -23,6 +23,8 @@ pub struct World {
     pub mode: Mode,
     /// Finished workflow runs of every project, oldest first.
     pub history: Vec<PastRun>,
+    /// A fixed clock instead of the real one, so tests see the same moment every time.
+    pub frozen: Option<i64>,
 }
 
 pub enum Mode {
@@ -81,6 +83,7 @@ impl World {
             now: now_ms(),
             history: load_history(&claude_dir),
             mode: Mode::Live(Live { claude_dir, tracks: Vec::new(), last_registry: None, last_dirs: None }),
+            frozen: None,
         }
     }
 
@@ -88,7 +91,14 @@ impl World {
     pub fn demo() -> World {
         let now = now_ms();
         let (demo, sessions, history) = Demo::start(now);
-        World { sessions, now, history, mode: Mode::Demo(demo) }
+        World { sessions, now, history, mode: Mode::Demo(demo), frozen: None }
+    }
+
+    /// The demo at a fixed moment that never moves: the same screens every time, for tests.
+    #[cfg(test)]
+    pub fn demo_at(now: i64) -> World {
+        let (demo, sessions, history) = Demo::start(now);
+        World { sessions, now, history, mode: Mode::Demo(demo), frozen: Some(now) }
     }
 
     pub fn is_demo(&self) -> bool {
@@ -136,19 +146,21 @@ impl World {
             now: start,
             history,
             mode: Mode::Replay(Replay { events, files, next: 0, sim: start as f64, last: Instant::now(), speed, paused: false }),
+            frozen: None,
         })
     }
 
     /// Reads whatever is new. Returns whether anything changed.
     pub fn tick(&mut self) -> bool {
+        let clock = self.frozen.unwrap_or_else(now_ms);
         match &mut self.mode {
             Mode::Live(live) => {
-                self.now = now_ms();
+                self.now = clock;
                 live_tick(live, &mut self.sessions, &mut self.history)
             }
             Mode::Replay(r) => replay_tick(r, &mut self.sessions, &mut self.now, false),
             Mode::Demo(d) => {
-                self.now = now_ms();
+                self.now = clock;
                 d.tick(self.now, &mut self.sessions, &mut self.history)
             }
         }
@@ -156,16 +168,17 @@ impl World {
 
     /// Loads everything available now: one live scan, or the whole replay.
     pub fn run_to_end(&mut self) {
+        let clock = self.frozen.unwrap_or_else(now_ms);
         match &mut self.mode {
             Mode::Live(live) => {
-                self.now = now_ms();
+                self.now = clock;
                 live_tick(live, &mut self.sessions, &mut self.history);
             }
             Mode::Replay(r) => {
                 replay_tick(r, &mut self.sessions, &mut self.now, true);
             }
             Mode::Demo(d) => {
-                self.now = now_ms();
+                self.now = clock;
                 d.tick(self.now, &mut self.sessions, &mut self.history);
             }
         }

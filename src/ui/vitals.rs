@@ -46,6 +46,8 @@ pub fn brainwave(s: &Session, now: i64, frame: usize, n: usize, only: Option<Pha
     let mut out = Vec::with_capacity(n);
     let mut prev = 2usize;
     let newest = now.div_euclid(BUCKET_MS);
+    // Each session gets its own trace: two busy sessions must not look identical.
+    let seed = s.id.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
     for k in 0..n {
         // The trace is tied to absolute time, so it scrolls with the buckets instead of changing.
         let bucket = newest - (n - 1 - k) as i64;
@@ -66,10 +68,10 @@ pub fn brainwave(s: &Session, now: i64, frame: usize, n: usize, only: Option<Pha
         }
         // Low activity stays visible; more than one agent at work saturates. A steady jitter per
         // bucket keeps a busy trace irregular, like a real one.
-        let jitter = 0.55 + 0.45 * ((bucket.wrapping_mul(2_654_435_761) >> 7).rem_euclid(1000) as f64 / 1000.0);
+        let jitter = 0.55 + 0.45 * (((bucket as u64 ^ seed).wrapping_mul(2_654_435_761) >> 7) % 1000) as f64 / 1000.0;
         let amp = (total as f64 / BUCKET_MS as f64).min(1.0).sqrt() * jitter;
         let live = k == n - 1;
-        let phase = bucket as f64 * 1.9 + if live { frame as f64 * 0.8 } else { 0.0 };
+        let phase = bucket as f64 * 1.9 + (seed % 628) as f64 / 100.0 + if live { frame as f64 * 0.8 } else { 0.0 };
         let y = |a: f64| (1.5 - 1.6 * amp * a.sin()).round().clamp(0.0, 3.0) as usize;
         let (y0, y1) = (y(phase), y(phase + 0.95));
         let bits = span_bits(0, prev, y0) | span_bits(1, y0, y1);

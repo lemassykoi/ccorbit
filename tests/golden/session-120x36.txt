@@ -1,0 +1,36 @@
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h
+╭ ∿ VITALS · last 5 minutes ────────────────────────────────────────────╮ ╭ ▸ DETAIL ─────────────────────────────────╮
+│ THINK ⠟⠦⣤⠖⠲⠤⠖⠒⠦⠴⠒⠦⠴⠒⠲⠤⠞⠳⠤⠴⠛⠦⠴⠋⢳⡤⠖⠲⣄⡖⠛⠦⠴⠒⢦⣠⠖⠲⣤⠞⠓⣆⡴⠛⠦⠤  3m56s · 49k tok │▌│tool     Edit                              │▌
+│ WRITE ⠤⢤⡤⠖⠲⠤⠖⠒⠦⠴⠒⠦⠤⠖⠲⠤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠖⠲⣤⠖⠛⢦⡴⠒⠦⠤⠞⠳⠤⠖⠒⠦⠴⠒⠦⠤  2m21s           │▌│about    …/lib/pricing.ts                  │▌
+│ TOOLS ⠤⠤⠤⠖⠲⣤⠖⠦⠤⠴⠒⠦⠤⠖⠲⠤⠤⠶⠤⠴⠒⠦⠴⠦⠶⠤⠖⠲⠤⠖⠒⠦⠴⠒⠦⠤⠖⠲⣤⠤⠖⠦⠴⠒⠦⠤  1m09s           │▌│status   done in 0.4s                      │▌
+│ ⇡ sent ▇▆▇▇·▁▇▇▁▇█· 3.2M/m   ⇣ generated ▄▃▅▃·▆▁▄▁▆█· 16k/m   log 306 │▌│started  6.2s ago                          │▌
+│ ◉ 96% cache · read 12M · written 489k · fresh 201 (5 min)   ✺ rebuilt │▌│result   ok                                │▌
+│ ctx ████░░░░░░░░ 36%  355k / 968k ceiling (seen) · in ~295 calls, ~36m│▌│                                           │▌
+╰───────────────────────────────────────────────────────────────────────╯▌│                                           │▌
+ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘│                                           │▌
+╭ ▸ webapp · Checkout redesign ────────────────────────── BUSY · FOLLOW ╮ │                                           │▌
+│      ▾ ⠦ review:securi…          1 steps · out 891 · sonnet-5-5 · 7.9s│▌│                                           │▌
+│          ✓ Edit       …/components/CartSummary.tsx                0.3s│▌│                                           │▌
+│    ▸ ○ 3 Verify                                                       │▌│                                           │▌
+│    ▸ ○ 4 Fix                                                          │▌│                                           │▌
+│    ✓ WebSearch  inline form validation accessible errors          2.3s│▌│                                           │▌
+│    ✓ github     search_issues · checkout is:open                  1.0s│▌│                                           │▌
+│    ✓ linear     get_issue · ENG-412                               1.2s│▌│                                           │▌
+│    ✓ Edit       …/styles/checkout.css                             0.2s│▌│                                           │▌
+│    ✓ WebSearch  inline form validation accessible errors          2.2s│▌│                                           │▌
+│    ✓ Read       …/lib/pricing.ts                                  0.4s│▌│                                           │▌
+│    ✓ Edit       …/lib/pricing.ts                                  0.4s│▌╰───────────────────────────────────────────╯▌
+│    ✓ Edit       …/routes/checkout.tsx                             0.5s│▌ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+│    ✓ Edit       …/styles/checkout.css                             0.4s│▌╭ ⇄ CONNECTIONS · ✦ SKILLS ─────────────────╮
+│    › run the tests and fix what breaks                           1m04s│▌│⇄ github           2× search_issues        │▌
+│    ✓ Edit       …/components/PaymentForm.tsx                      0.4s│▌│⇄ linear           2× get_issue            │▌
+│    ✓ Read       …/components/PaymentForm.tsx                      0.5s│▌│                                           │▌
+│    ✓ Edit       …/routes/checkout.tsx                             0.3s│▌│✦ webapp-testing                           │▌
+│    ✓ Edit       …/lib/coupons.ts                                  0.3s│▌│                                           │▌
+│    ✓ Skill      webapp-testing                                    0.4s│▌│⠦ 1 background task running                │▌
+│    ✓ Bash       Run the tests                                     4.0s│▌│                                           │▌
+│    ✓ Edit       …/lib/pricing.ts                                  0.4s│▌│                                           │▌
+│  █                                                                    │▌│                                           │▌
+╰───────────────────────────────────────────────────────────────────────╯▌╰───────────────────────────────────────────╯▌
+ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+ ↑↓  move   ⏎  fold   e  expand all   f  follow   tab  next   g  hud   esc  wall   t  theme   q  quit   ?  help  phospho

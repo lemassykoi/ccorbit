@@ -60,6 +60,8 @@ enum View {
 
 struct App {
     started: Instant,
+    /// A fixed animation clock in milliseconds, for tests.
+    clock: Option<u128>,
     boot: bool,
     view: View,
     theme: usize,
@@ -131,6 +133,7 @@ impl App {
     fn new(opts: &Opts, replay: bool) -> App {
         App {
             started: Instant::now(),
+            clock: None,
             boot: opts.boot,
             view: if opts.hud || opts.director {
                 View::Hud
@@ -180,7 +183,7 @@ impl App {
     }
 
     fn ms(&self) -> u128 {
-        self.started.elapsed().as_millis()
+        self.clock.unwrap_or_else(|| self.started.elapsed().as_millis())
     }
 
     fn frame(&self) -> usize {
@@ -2573,5 +2576,126 @@ mod tests {
         assert_eq!(toasts.len(), 2);
         assert_eq!(toasts[0].count, 4);
         assert!(toasts[0].born.elapsed() >= Duration::from_millis(250), "a counted notice does not slide in again");
+    }
+
+    /// The moment every golden screen shows.
+    const FIXED: i64 = 1_790_000_000_000;
+
+    fn demo_world() -> World {
+        let mut world = World::demo_at(FIXED);
+        world.run_to_end();
+        world
+    }
+
+    /// One screen of the demo at the fixed moment, as text.
+    fn render(world: &World, name: &str, w: u16, h: u16) -> String {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let opts = crate::Opts::new(std::path::PathBuf::from("/nonexistent"));
+        let mut app = App::new(&opts, false);
+        app.boot = false;
+        app.clock = Some(4_200);
+        app.hud.settle = true;
+        app.hud.frozen = Some(12.5);
+        match name {
+            "wall" => {}
+            "session" => {
+                app.view = View::Session;
+                app.session = Some(world.sessions[0].id.clone());
+            }
+            "hud" => app.view = View::Hud,
+            "hud-flat" => {
+                app.view = View::Hud;
+                app.hud.set_flat(true);
+            }
+            "city" => app.view = View::City,
+            "help" => app.help = true,
+            other => panic!("no screen named {other}"),
+        }
+        let mut term = Terminal::new(TestBackend::new(w, h)).expect("test terminal");
+        term.draw(|f| draw(f, &mut app, world)).expect("draw");
+        let buf = term.backend().buffer();
+        (0..h).map(|y| (0..w).map(|x| buf[(x, y)].symbol()).collect::<String>().trim_end().to_string() + "\n").collect()
+    }
+
+    fn is_dot(c: char) -> bool {
+        ('\u{2800}'..='\u{28ff}').contains(&c)
+    }
+
+    /// Compares `got` with its golden copy in tests/golden/. Text must match exactly. Braille dots
+    /// may move in a few cells: floating point is not bit-identical across systems.
+    fn check_golden(name: &str, got: &str) {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden").join(format!("{name}.txt"));
+        if std::env::var_os("UPDATE_GOLDEN").is_some() {
+            std::fs::create_dir_all(path.parent().expect("golden folder")).expect("create tests/golden");
+            std::fs::write(&path, got).expect("write golden copy");
+            return;
+        }
+        let want = std::fs::read_to_string(&path)
+            .unwrap_or_else(|_| panic!("{} is missing: run `UPDATE_GOLDEN=1 cargo test`, then read the new file before committing it", path.display()))
+            .replace('\r', "");
+        let (wl, gl): (Vec<&str>, Vec<&str>) = (want.lines().collect(), got.lines().collect());
+        let blank = |c: char| c == ' ' || c == '\u{2800}';
+        let (mut changed, mut dots, mut moved) = (Vec::new(), 0usize, 0usize);
+        for i in 0..wl.len().max(gl.len()) {
+            let (a, b): (Vec<char>, Vec<char>) = (wl.get(i).unwrap_or(&"").chars().collect(), gl.get(i).unwrap_or(&"").chars().collect());
+            let mut text_differs = false;
+            for k in 0..a.len().max(b.len()) {
+                let (x, y) = (a.get(k).copied().unwrap_or(' '), b.get(k).copied().unwrap_or(' '));
+                if is_dot(x) || is_dot(y) {
+                    dots += 1;
+                    if x != y {
+                        // A dot that moved, appeared or vanished is jitter; a dot that became text is not.
+                        if (is_dot(x) || blank(x)) && (is_dot(y) || blank(y)) {
+                            moved += 1;
+                        } else {
+                            text_differs = true;
+                        }
+                    }
+                } else if x != y {
+                    text_differs = true;
+                }
+            }
+            if text_differs {
+                changed.push(format!("  line {:>2}\n    golden: {}\n    now:    {}", i + 1, wl.get(i).unwrap_or(&""), gl.get(i).unwrap_or(&"")));
+            }
+        }
+        let allowed = (dots / 50).max(6);
+        if !changed.is_empty() || moved > allowed {
+            panic!(
+                "{name}: the screen changed ({} lines of text differ; {moved} of {dots} dot cells moved, {allowed} allowed).\n{}\n\n\
+                 If the change is intended: run `UPDATE_GOLDEN=1 cargo test`, read `git diff tests/golden`, and say in the commit why the screen changed.\n\
+                 If it is not: the last change broke this screen.",
+                changed.len(),
+                changed.into_iter().take(12).collect::<Vec<_>>().join("\n")
+            );
+        }
+    }
+
+    #[test]
+    fn screens_match_their_golden_copies() {
+        let world = demo_world();
+        for (w, h) in [(120, 36), (170, 50)] {
+            for name in ["wall", "session", "hud", "hud-flat", "city", "help"] {
+                check_golden(&format!("{name}-{w}x{h}"), &render(&world, name, w, h));
+            }
+        }
+    }
+
+    #[test]
+    fn readings_match_their_golden_copy() {
+        let mut world = demo_world();
+        check_golden("demo-dump", &dump(&mut world));
+    }
+
+    #[test]
+    fn every_screen_survives_small_and_odd_terminals() {
+        let world = demo_world();
+        for (w, h) in [(30, 10), (40, 12), (61, 17), (80, 24), (99, 30), (300, 90)] {
+            for name in ["wall", "session", "hud", "hud-flat", "city", "help"] {
+                let text = render(&world, name, w, h);
+                assert_eq!(text.lines().count(), h as usize, "{name} at {w}x{h} draws every row");
+            }
+        }
     }
 }

@@ -1,0 +1,36 @@
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h
+┏━━                                                                                                                  ━━┓
+┃ ◤ SYSTEM ACTIVE                                                                                                      ┃
+  sessions 4 live · 3 busy
+  agents   3 running
+  uplink   ⇡ 12M/m
+  downlink ⇣ 31k/m
+  burn     ≈$343/h API-equiv.
+  view     3D · 32° · 1.0×
+                                      ⢀                                        ⣀⣤⣄
+                                      ⠽⠇         ⢠⣀⢀⢀⢀⡰⠄⠄⠄⠄⢼⠠⠠⠠⠠⠰⢀⡀⡀⡀⣠        ⡠⢿⣯⣿⠇
+                               webapp-testing ⠂⠂⠉⠈   ⣠⢆⣀⡖⣄            ⠉⠈⢀⠐⠤⠄ linear
+                                    ⢄⡠⠠⠐⠁⠁           ⠈⠋ ⠉⠐ ⢀       ⢀⡠⠐⠒ ⠁    ⠈⠈⠐⠂⢄⢀⠄
+                               ⠠⢄⢀⠔⠐⠁                   ⡀⡀⣎⣽⣍⡆⡀⠠⠄⠐⠁                ⠁⠢⢠⣀⠤
+                            ⢀⡀⡀⠤⠊               ⢀⠠⠠⠈⠂⠁⠈  ⢀⠓⠽⠕⠃  ⠁⠈⠐⠈⠂⠄⡀          ⡀    ⠈⠐⢄ ⣀
+                            ⠠⠊              ⠄⢀⠐⠈     ⠠⠄⢀ api ⢄⡂⠄ ⠂     ⠈⠐⠄ ⠄    ⠪⡨⠂      ⠑⢄
+                          ⢒⠔⠁           ⢀ ⢀⠐⢤⡀ ⣀ ⠤⠂⠉⠁ ⡀ 4.8M/m ⢢⠡      ⠈  ⢀⠠⣀⡐⢄⡀           ⠑⢔⠂
+                       ⣀⣀⠠⠊    ⢀   ⢀⠤⡀ ⢰⢡⢎⣷⣯⢦⢱⡀⢀⡀⢀⣀⢀⣀ ⠂⡏⠊⢰⣷⡿⣷⣷⠈⡎⡇⡁⢀⣀⢀⣀ ⣀⢀⢰⢱⢋⣶⣮⢳⢣⡀  ⢀   ⢀     ⢆⢀⣀⡀
+                         ⡎         ⠈⠲⠉ ⠈⣎⠣⢟⠯⢋⠜        ⠅⢧⢀⡘⢟⣿⣟⠟⠠⢣⠇⠅       ⠘⣜⠦⣛⡫⢞⠜             ⠈⡂
+                      ⠠⠤⢰            docs-site ⠠      ⠐⢈⠢⣕⠢⠤⠤⣆⠁⢈⠐⣠⢄  ⢀⠠ webapp·47             ⢘⠠⠤
+                        ⢰              1.7M/m         ⠂ ⠈⠠⠉ ✖ checkout.tsx 9M/m               ⢘
+                      ⠐⠒⠐⡄           ⠂        ⠂⠄⢀       ◆ CORE ⣀⢄⠨⡘⣍⠟⡐ ⡀⠄⠁        ⠂           ⡊⠐⠒
+                         ⠰⡀ ⠠⣰⡠                   ⠁⠂ ⠄ ⇡12M review-and-fix              ⡜⡭⡱⡀ ⡠⠁
+                       ⠒⠊⠁⠑⠄⠈⠙⠉                         ⢣⠘⢜⣛⣋⠜⢰⠁⠐⢅⣸⠂⠃                   ⠳⠭⠕⠁⡠⠁⠉⠒⠂
+                        code-review          ⠈         we review:securi… ⠈            github
+                           ⠁ ⠈⠂⢄           ⠄          ⠠ 3.2M/m ⠈⠁⠠⠈⢆        ⠄           ⡠⠈  ⠁
+                               ⣠⠐⠠⢀                     review:a11y ⢆                ⠄⠂⢡⡀
+                                   ⠈⠐⠠ ⡀         review:design   ⠄ ⠁⠈⢆           ⡀⠄⠂⠁
+                                    ⠴⠁  ⠁⠂⠠ ⠄⡀             ⢀ ⠐ ⠈  ⠄⠈ ⠘⡄   ⢀ ⠄⠂⠈⠈  ⠱⠄
+                                           ⠰⠂ ⠈ ⠁⠐ ⢂⠠ ⠄⠠ ⠄⢀ ⡀⠠ ⠄⠤ ⠄⢠⠈⠂⠘ ⠁⠁ ⠲
+  ▸   6.4s docs-site    github search_issues · checkout is ⢸       ⠈⠂
+  ▸   6.2s webapp       Edit …/lib/pricing.ts              ⠈
+  ▸   3.2s webapp       Edit …/components/CartSummary.tsx
+┃ ▸   1.9s docs-site    linear get_issdrag turn · wheel zoom · click lock · v flat · d director · space ping · 0 reset ┃
+┗━━                                                                                                                  ━━┛
+ tab  target   ⏎  open   +-  zoom   v  flat/3D   d  director   0  reset   esc  wall   q  quit         ?  help  phosphor

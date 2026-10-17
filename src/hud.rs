@@ -183,6 +183,8 @@ pub struct HudState {
     director: Director,
     /// Place nodes at their targets on the next frame instead of flying them in.
     pub settle: bool,
+    /// A fixed animation time in seconds, for tests.
+    pub frozen: Option<f64>,
 }
 
 impl HudState {
@@ -219,6 +221,7 @@ impl HudState {
             last_click: None,
             director: Director::new(),
             settle: false,
+            frozen: None,
         }
     }
 
@@ -248,9 +251,9 @@ impl HudState {
             return;
         }
         let now = Instant::now();
-        let dt = self.last.map_or(0.0, |l| now.duration_since(l).as_secs_f64()).min(0.25);
+        let dt = if self.frozen.is_some() { 0.0 } else { self.last.map_or(0.0, |l| now.duration_since(l).as_secs_f64()).min(0.25) };
         self.last = Some(now);
-        let time = now.duration_since(self.started).as_secs_f64();
+        let time = self.frozen.unwrap_or_else(|| now.duration_since(self.started).as_secs_f64());
         if !self.director.on && self.last_input.elapsed() > IDLE_DIRECTOR && fx {
             self.director.set(true);
         }
