@@ -1,0 +1,237 @@
+# ccorbit
+
+A live terminal view of every Claude Code session running on your machine. It shows sessions,
+subagents, workflows, skills, MCP servers, token flow, cost and context, as a wall of cards, a
+live tree per session, a 3D hologram you can turn with the mouse, and a city of the files being
+worked on.
+
+It is a single Rust binary of about 1.2 MB. It only reads the files Claude Code already writes: it
+never writes, never runs a command and never opens a network connection. It uses about 2% CPU and
+9 to 13 MB of memory.
+
+```
+▐ ◆ CCORBIT ▌ ● LIVE  3 sessions · 2 busy · 4 agents running   ⇡ 1.4M/m ⇣ 6.8k/m ≈$44/h
+╭ ⠋ webapp ────────────────────────── BUSY ╮ ╭ ● api ─────────────────────────── IDLE ╮
+│Checkout redesign                         │▌│Rate limiter                            │▌
+│⠋ Bash  Run the integration tests     26s │▌│✓ Edit  …/limiter/token_bucket.go 2m ago│▌
+│◆ 2 running of 7  ↻ 1 bg  ✦ 2 skills      │▌│⚠ Bash ×4 in a row  ◆ 1 agent           │▌
+│⇡ 991k/m ⇣ 2.5k/m ▸····▸····▸  ██░░░░ 25% │▌│⇡    0/m ⇣    0/m ··········  ███░░ 31% │▌
+│⠤⠔⠉⠢⠤⠒⠊⠑⠤⠤⠒⠉⠢⠔⠒⠉ ◉ 99% ≈$125 opus-5-5    │▌│⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠢⠤⠤⠤ ◉ 97% ≈$31 sonnet-5-5  │▌
+│› run the full suite and fix what breaks  │▌│› make the limiter per tenant           │▌
+╰──────────────────────────────────────────╯▌╰────────────────────────────────────────╯▌
+```
+
+## Install
+
+You need a Rust toolchain recent enough for edition 2024 (rustc 1.85 or newer):
+`brew install rust` on macOS, or [rustup](https://rustup.rs) anywhere.
+
+```sh
+git clone https://github.com/pcangemi/ccorbit.git
+cd ccorbit
+cargo build --release
+mkdir -p ~/.local/bin && cp target/release/ccorbit ~/.local/bin/
+```
+
+Or in one step: `cargo install --git https://github.com/pcangemi/ccorbit`.
+
+Make sure `~/.local/bin` (or `~/.cargo/bin` after `cargo install`) is on your `PATH`, then run:
+
+```sh
+ccorbit              # the wall of sessions
+ccorbit --hud        # start on the 3D hologram
+ccorbit --director   # the hologram with the camera running itself, for a second screen
+```
+
+It is built and tested on macOS and should work on Linux, in any terminal with mouse support. Gradients and fog look best with
+24-bit color (`COLORTERM=truecolor`, which Ghostty, iTerm2, WezTerm, kitty and Warp set); other
+terminals get the nearest 256-color shades.
+
+### If the build fails on macOS
+
+`tapi error: malformed file ... unknown architecture arm64e.x1-macos` means the Command Line Tools
+linker is older than the default macOS SDK. Build against an SDK it can read:
+
+```sh
+ls /Library/Developer/CommandLineTools/SDKs/
+SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk cargo build --release
+```
+
+## Screens
+
+Every session keeps one color everywhere: on its card, its tower, its feed lines, its planet in
+the hologram and its district in the city. Two sessions in the same folder get a suffix
+(`webapp·63`).
+
+### Wall (the start screen)
+
+One card per running session, whatever its project:
+
+- **Status:** BUSY, IDLE, ENDED, or a blinking NEEDS YOU when a question or a plan waits for your
+  answer.
+- **Current step:** it shimmers while it runs. "model · thinking or writing the next step" means
+  the session is generating with no tool running.
+- **Chips:** collisions (`✖`), warnings (`⚠`), the workflow race (`△`), agents, background tasks,
+  skills and MCP servers.
+- **Token flow** over the last minute, and the context gauge against the compaction ceiling.
+- **Brainwave**, cache reactor, estimated price and model (see Readings).
+- **Last prompt.**
+
+Below the cards:
+
+- **Skyline:** one isometric tower per session, its height following tokens per minute.
+- **Signal feed:** the latest events of all sessions.
+
+### Session (Enter on a card)
+
+- **Vitals:**
+  - three brainwave traces (thinking, writing, tools) over the last five minutes;
+  - tokens sent and generated;
+  - the prompt cache with its hit ratio and the estimated price;
+  - the context against the compaction ceiling, with how many calls are left at the current pace.
+- **Tree:** prompts and steps, subagents under the call that started them, and workflows with
+  their phases. The agents of a running workflow appear live, each with its own steps. Slow or
+  looping calls are marked `⚠`.
+- **Detail** of the selected row. A workflow shows its race against an earlier run: two lanes on
+  one time scale, ahead or behind, and the estimated time left.
+- **Connections:** MCP servers and skills.
+
+### HUD (`g`): the hologram
+
+- **Layout:** the core sits in the middle. Sessions orbit it as planets on a tilted floor, and
+  their agents and workflows circle them as moons. The MCP servers and skills they share hang on a
+  crown around the edge.
+- **Depth:** far things fade and shrink.
+- **Packets** run along the links as work happens:
+  - prompts come in from the core;
+  - calls go out to agents, workflows and servers;
+  - results come back, green when they succeed and red when they fail;
+  - token traffic streams between each session and the core.
+- **Events:** new nodes fly out from their parent, a rebuilt prompt cache flares, and two sessions
+  changing the same file are joined by a flashing red link.
+- **Mouse:**
+  - drag to turn the view (across to spin, up and down to tilt);
+  - wheel to zoom around the pointer;
+  - click to lock a target, which dims what it is not linked to and opens a panel with its details;
+  - double-click to open a session, or to fly to any other node.
+- **`v`** folds the view flat (seen from above) and back.
+- **`d`** starts the director: the camera runs itself like a live broadcast.
+  - It flies to whatever just happened (a session waiting for you, a collision, a failure, a slow
+    or looping call, an agent or a workflow finishing) and holds the shot under a caption.
+  - Between events it slowly circles the graph while the caption tours the sessions, and an inset
+    follows the busiest session.
+  - It also starts by itself after two minutes without input. Any key or click hands the camera
+    back.
+
+### Code city (`c`)
+
+- **Districts and buildings:** every file the sessions read or changed is a building, grouped by
+  project. A building's height follows the number of lines changed, and its color is the session
+  that touched it last.
+- **Signals:** fresh edits glow, windows light up while a file is being read, and a file two
+  sessions change at once flashes red.
+- **Side panel:** the selected file (who, when, lines added and removed) and the files that
+  changed most.
+- **Keys:** `[` and `]` change the time window (hour, 6 hours, 24 hours, everything loaded), and
+  Enter opens the session that touched the selected file last.
+
+**Help (`?`)** lists every key, glyph and color. **Toasts** in the bottom right announce:
+
+- an agent or workflow finished, with the race result;
+- a failure;
+- a session that needs you;
+- a compaction;
+- a slow or looping call;
+- a collision.
+
+## Readings
+
+| Reading | What it is | Where it comes from |
+|---|---|---|
+| Brainwave | Time spent thinking, writing and waiting for tools, summed over all agents | The gaps between transcript records: Claude Code writes each thinking block, text and tool call when it is complete, and each tool result when the tool returns. Thinking text is not in the transcript; only its size and timing are used. |
+| Cache reactor `◉ 97%` | Share of the input served from the prompt cache over five minutes; `✺` flares when the cache is rebuilt | The `usage` of each API call |
+| Price `≈$12.40` | What the tokens would cost on the Anthropic API | Built-in list prices (October 2026), including cache write and read rates and fast mode. A subscription does not bill this way. Models missing from the list are left out. |
+| Compaction ceiling | Context against the largest automatic compaction seen with the same model, and calls left at the current pace | `compact_boundary` records. Claude Code can compact earlier than the ceiling. |
+| `⚠ 9× usual` | A call running far longer than calls of its kind | Durations of finished calls, by tool, by program for shell commands and by agent type. A warning needs at least 5 minutes and 5 earlier calls, and 8 times the usual duration. |
+| `⚠ ×4 in a row` | An agent repeating the exact same call, or failing with the same tool again and again | Tool name and input |
+| `✖ collision` | A file changed by two sessions (or by two agents of one session at work at the same time) within 15 minutes | Edit and write results |
+| `△ 8m behind · ETA 12m` | A running workflow against the last earlier run of the same workflow, or of one with the same phases | Earlier runs' `wf_*.json` records |
+
+## Keys
+
+| Where | Keys |
+|---|---|
+| Everywhere | `?` help · `g` HUD · `c` code city · `t` theme · `x` effects on or off · `m` mouse capture off (to select text) · `q` quit |
+| Wall | arrows or `hjkl` select · Enter open · mouse: click selects, click again opens, wheel moves |
+| Session | arrows or `jk` move · Enter fold · `e` expand all · `f` follow the newest step · `Tab` next session · `Esc` back |
+| HUD | `Tab` or arrows cycle targets · Enter open · `f` fly to the target · `+` `-` zoom · `0` reset the view · `v` flat or 3D · `d` director · space ping · `Esc` drop the target, then back |
+| Code city | arrows move · Enter open the session · `[` `]` time window · `Esc` back |
+| Replay | `p` pause · `<` `>` speed |
+
+## Options
+
+| Option | Effect |
+|---|---|
+| `--hud` | Start on the hologram |
+| `--director` | Start on the hologram with the director at the camera |
+| `--replay <FILE>` | Play back a recorded transcript (`~/.claude/projects/<project>/<session>.jsonl`) |
+| `--speed <N>` | Replay speed, default 20 (idle stretches are skipped) |
+| `--theme <NAME>` | `phosphor` (default), `amber` or `neon` |
+| `--claude-dir <DIR>` | Claude Code data directory, default `$CLAUDE_CONFIG_DIR` or `~/.claude` |
+| `--no-boot` | Skip the boot animation |
+| `--dump` | Print every session and its readings as plain text, then exit |
+
+## What it reads
+
+Only files Claude Code already writes, under `~/.claude`. No hook, no settings change, no command,
+no network.
+
+| Path | Used for |
+|---|---|
+| `sessions/<pid>.json` | Which sessions run now. The `.key` files beside them are never opened. A session counts as running while its process exists (checked with signal 0, which sends nothing). |
+| `projects/<folder>/<session>.jsonl` | Prompts, steps, results, token usage, compactions, background task notices, title |
+| `projects/<folder>/<session>/subagents/` | Subagents, and the agents of running workflows (`subagents/workflows/<run>/`) |
+| `projects/<folder>/<session>/workflows/wf_*.json` | Finished workflow runs: phases, agents, durations |
+
+Transcripts hold your work. ccorbit keeps one-line summaries, counts and times in memory: never
+message bodies, file contents or edited text. It never writes anything anywhere.
+
+## Limits
+
+- The transcript format is not a documented interface. This was built against Claude Code 2.1 and
+  may need changes when the format moves.
+- Token rates are counted when each response is written, so a long reply shows as a burst.
+- "Sent" counts every input token the model processes, cache reads included, which is why it is
+  much larger than "generated".
+- Network bytes are not in any file; the session view shows how fast its transcripts grow instead.
+- Agents of a workflow that had already finished when ccorbit started come from the run's record,
+  without their steps.
+- A background task launched before the current Claude Code process started is shown as lost.
+
+## Development
+
+```sh
+cargo test                     # 14 tests: parsing, lifecycles, readings, prices, HUD hit tests
+cargo run --release -- --dump  # check the readings against your own sessions
+```
+
+| File | Role |
+|---|---|
+| `src/main.rs` | Options and startup |
+| `src/source.rs` | Live discovery and file following, replay, workflow history |
+| `src/tail.rs` | Follows an append-only file by byte offset, holding back partial lines |
+| `src/model.rs` | Session state built from transcript lines: steps, agents, tokens, phases, files, compactions |
+| `src/insight.rs` | Readings across sessions: slow and looping calls, collisions, workflow races, compaction ceilings |
+| `src/price.rs` | API list prices |
+| `src/parse.rs` | Tolerant readers for the pieces of records shown on screen |
+| `src/ui.rs` | Boot screen, wall, skyline, session view, keys and mouse, plain-text dump |
+| `src/ui/vitals.rs` | Brainwave, cache reactor, context gauge, race lanes |
+| `src/ui/city.rs` | The code city |
+| `src/hud.rs` | The hologram: layout, camera, animation, packets, hit tests, target panel |
+| `src/hud/director.rs` | The director |
+| `src/theme.rs` | Palettes, gradients, fog and the 256-color fallback |
+
+Two hidden options help check the layout without a terminal:
+
+- `--snapshot WxH` prints one frame of each view as text.
+- `--snapshot-html WxH DIR` writes colored HTML frames you can open in a browser.
