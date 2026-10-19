@@ -1,7 +1,6 @@
 # ccorbit
 
-[![CI](https://github.com/pcangemi/ccorbit/actions/workflows/ci.yml/badge.svg)](https://github.com/pcangemi/ccorbit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/ccorbit.svg)](https://crates.io/crates/ccorbit)
+[![CI](https://github.com/lemassykoi/ccorbit/actions/workflows/ci.yml/badge.svg)](https://github.com/lemassykoi/ccorbit/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 **This is a local fork:** the live source is [opencode](https://opencode.ai) rather than Claude
@@ -22,28 +21,12 @@ opens no network connection, except the opt-in [engine pulse](#the-engine-pulse)
 
 ## Install
 
-On macOS or Linux, the prebuilt binary:
+This fork is not on crates.io or Homebrew (the upstream releases there are the Claude Code
+original). Build it from this repository — Rust 1.85 or newer:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/pcangemi/ccorbit/releases/latest/download/ccorbit-installer.sh | sh
-```
-
-On Windows, in PowerShell:
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/pcangemi/ccorbit/releases/latest/download/ccorbit-installer.ps1 | iex"
-```
-
-With Homebrew:
-
-```sh
-brew install pcangemi/tap/ccorbit
-```
-
-With Cargo (Rust 1.85 or newer):
-
-```sh
-cargo install ccorbit
+git clone https://github.com/lemassykoi/ccorbit.git && cd ccorbit
+cargo install --path .        # or: cargo build --release, and run target/release/ccorbit
 ```
 
 Then run it:
@@ -62,7 +45,7 @@ Terminal all have it); other terminals get the nearest 256-color shades.
 ### From source
 
 ```sh
-git clone https://github.com/pcangemi/ccorbit.git
+git clone https://github.com/lemassykoi/ccorbit.git
 cd ccorbit
 cargo build --release
 cp target/release/ccorbit ~/.local/bin/
@@ -331,11 +314,10 @@ Releases are built by [dist](https://axodotdev.github.io/cargo-dist/) from a ver
 
 1. Set the version in `Cargo.toml`, move the changes in `CHANGELOG.md` under it, commit to `main`.
 2. Tag and push: `git tag -a v0.2.0 -m "ccorbit 0.2.0" && git push origin v0.2.0`. The release
-   workflow builds the archives, the installer and the Homebrew formula (`ccorbit.rb`) and
-   publishes them as a GitHub release.
-3. Copy `ccorbit.rb` from the release into `Formula/` of
-   [pcangemi/homebrew-tap](https://github.com/pcangemi/homebrew-tap) and push it.
-4. Publish to crates.io from the tag: `cargo publish`.
+   workflow builds the archives and the installer and publishes them as a GitHub release on this
+   repository.
+3. The fork does not publish to crates.io (the name is upstream's) and does not feed the upstream
+   Homebrew tap. Most days the install is simply `cargo install --path .`.
 
 ## License
 
