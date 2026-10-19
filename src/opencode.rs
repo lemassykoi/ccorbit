@@ -19,8 +19,12 @@ use crate::parse;
 use crate::time::fmt_iso;
 
 /// Sessions quiet for longer than this drop off the wall; their data stays in the database and
-/// the card returns as soon as anything is written to them again.
-const ACTIVE_WINDOW: i64 = 3_600_000;
+/// the card returns as soon as anything is written to them again. A session cannot be told
+/// cancelled from resting except by silence (opencode writes nothing on close), so this trades
+/// how long a stale card hangs around against the longest call that runs without touching a
+/// row: a genuine tool in flight writes nothing until it ends, and the monitors people run
+/// here top out around twenty minutes.
+const ACTIVE_WINDOW: i64 = 20 * 60_000;
 /// The most sessions shown at once, newest activity first.
 const MAX_SESSIONS: usize = 48;
 /// How often the database is polled.

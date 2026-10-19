@@ -213,8 +213,9 @@ database is opened `READ_ONLY` and WAL readers never block the writer.
   much larger than "generated".
 - A local engine reports its cache hits only in aggregate: the per-session cache reactor reads
   zero while the footer's engine pulse carries the true share (from the engine's counters).
-- A session quiet for an hour drops off the wall (a closed chat leaves no trace in the database);
-  its card returns the moment anything is written to it again.
+- A session quiet for twenty minutes drops off the wall (a closing a chat leaves no trace in the
+  database): its card returns the moment anything is written to it again. Archiving or deleting a
+  session in opencode removes its card at once.
 - Nothing in the database says "this opencode process died": a turn left open with no row moving
   for ten minutes is treated as crashed, and its open calls close as lost. A legitimate tool that
   runs silent past ten minutes shows idle meanwhile and heals itself on the next row. A question

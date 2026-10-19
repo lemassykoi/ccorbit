@@ -66,8 +66,8 @@ opencode leaves no process identity behind, so ccorbit decides alone:
 - a `running` tool whose message completed, or an open turn silent past 10 min, is a crashed
   process: the calls close at the turn's end with "no result: the turn ended without it", and
   the card reads idle;
-- closing a chat writes nothing: an idle session drops off the wall after an hour of silence and
-  returns on activity;
+- closing a chat writes nothing: a session quiet for twenty minutes leaves the wall and returns
+  on activity; archiving or deleting one drops its card immediately;
 - rows frozen longer than `ACTIVE_WINDOW` never even load, so old sessions cost nothing.
 
 ## Observed facts
