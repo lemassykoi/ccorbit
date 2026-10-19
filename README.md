@@ -9,6 +9,11 @@ sessions, subagents, skills and MCP servers, token flow, cost and context, as a 
 live tree per session, a 3D hologram you can turn with the mouse, and a city of the files being
 worked on. An optional read-only [engine pulse](#the-engine-pulse) sits in the footer.
 
+**Compatibility:** this fork's live source is tested against **opencode 1.19** only. opencode's
+storage schema is undocumented and moves; other versions may misread or show nothing (never
+worse: the database is opened read-only, and a failed query reopens on the next poll). See
+[docs/OPENCODE_FORMAT.md](docs/OPENCODE_FORMAT.md) for exactly what is read.
+
 It is a single Rust binary of about 3.3 MB (SQLite rides along). It only reads the files opencode
 already writes — its storage database, opened read-only: it never writes, never runs a command and
 opens no network connection, except the opt-in [engine pulse](#the-engine-pulse). It sits under
