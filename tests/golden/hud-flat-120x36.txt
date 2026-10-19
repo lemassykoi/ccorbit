@@ -3,8 +3,8 @@
 ┃ ◤ SYSTEM ACTIVE                                                                                                      ┃
   sessions 4 live · 3 busy                                 ⢠
   agents   3 running                      ⢀        ⠆  ⡀ ⡀ ⡀⠘⡀ ⢀ ⢀ ⢀ ⠆       ⢀
-  uplink   ⇡ 12M/m                ⢄       ⡈⠁⠄⠐  ⠁ ⠁ ⠁               ⠈ ⠈ ⠐ ⠠ ⠩ ⢀     ⢀⠄
-  downlink ⇣ 31k/m                ⢀⠁⠄ ⠂ ⠁                                       ⠈ ⠂ ⠅
+  uplink   ⇡ 180k/s               ⢄       ⡈⠁⠄⠐  ⠁ ⠁ ⠁               ⠈ ⠈ ⠐ ⠠ ⠩ ⢀     ⢀⠄
+  downlink ⇣ 593/s                ⢀⠁⠄ ⠂ ⠁                                       ⠈ ⠂ ⠅
   burn     ≈$343/h API-equiv.⢀ ⠄⠈                                                     ⠁⠐ ⠄ ⠔
   view     flat · 1.0×   ⢐⣶⠐                            ⠰⡽⠂  ⠺⡵                            ⢠⣯⣿⡆  ⢀
                    webapp-testing                         ⡀  ⡀                       ⢀⡀⠠⠂⠈⠉ ⠙⠋ ⠂⢀⠉
@@ -19,7 +19,7 @@
             ⠨           ⠈⠋       ⠈⢻⡪⠭⠪⠃                ⢂⢣⢄⡛⠿⠟⠃⢧⠣⠁              ⣀⠠⢫⣪⠭⠺⠇       ⠈⠋           ⠨
             ⠈⡀                  docs-site               ⠐⢑⠪⠭⠁⡀⠄⠁           ⢀⠠ webapp·47                   ⡈
           ⠐⠉ ⢐                   1.7M/m                 ◆ CORE  ✖ checkout.tsx 2.9M/m                    ⢐ ⠈⠑
-              ⠐                        ⠁ ⡀             ⇡12M ⇣31k     ⡠⠄⠊       ⠄                        ⠐
+              ⠐                        ⠁ ⡀          ⇡180k/s ⇣593/s   ⡠⠄⠊       ⠄                        ⠐
             ⠠⠤ ⠡                          ⠐ ⢀              ⢰⣿⣿⣿⣿⡄⣀⠄⠊⠁      ⠠ ⠈                         ⠠⠁⠠⠤
                 ⠈⠠                             ⠂ ⢀       ⢠⢄⡠⣐⢄⠄⠒⠁⡄  ⢀  ⠄ ⠁                           ⠠⠈
                ⣀⣀⠄⠈⠠                                ⠁ ⠐  ⢪⢏⠿⢏⢯⠆⣻⣵⣻⡄                                ⠠⠈ ⢄⣀⡀

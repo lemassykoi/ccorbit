@@ -336,7 +336,8 @@ fn draw(f: &mut Frame, app: &mut App, world: &World) {
         View::City => city::draw(f, body, app, world, &order, &ins),
         View::Hud => {
             let names = names(world, &order);
-            app.hud.draw(f, body, t, app.fx, world, &order, &names, &ins.alerts, &ins.collisions);
+            let engine = app.engines.blend_hit();
+            app.hud.draw(f, body, t, app.fx, world, &order, &names, &ins.alerts, &ins.collisions, engine);
         }
     }
     footer(f, foot, app, world);

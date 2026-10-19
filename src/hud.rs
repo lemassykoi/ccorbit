@@ -246,6 +246,7 @@ impl HudState {
         names: &HashMap<usize, String>,
         alerts: &[Alert],
         collisions: &[Collision],
+        engine: Option<f64>,
     ) {
         if area.width < 30 || area.height < 12 {
             return;
@@ -586,7 +587,7 @@ impl HudState {
             }
         });
         f.render_widget(canvas, area);
-        self.overlays(f, area, t, world, order, names, sel.as_ref(), callout);
+        self.overlays(f, area, t, world, order, names, sel.as_ref(), callout, engine);
         self.settle = false;
     }
 
@@ -693,13 +694,14 @@ impl HudState {
         names: &HashMap<usize, String>,
         sel: Option<&Hit>,
         callout: Option<Rect>,
+        engine: Option<f64>,
     ) {
         let now = world.now;
         let live = world.sessions.iter().filter(|s| s.alive).count();
         let busy = world.sessions.iter().filter(|s| s.busy()).count();
         let agents: usize = world.sessions.iter().map(Session::running_agents).sum();
-        let up: u64 = world.sessions.iter().map(|s| s.tok_up.per_min(now)).sum();
-        let down: u64 = world.sessions.iter().map(|s| s.tok_down.per_min(now)).sum();
+        let up: u64 = world.sessions.iter().map(|s| s.tok_up.per_sec(now)).sum();
+        let down: u64 = world.sessions.iter().map(|s| s.tok_down.per_sec(now)).sum();
         let buf = f.buffer_mut();
 
         let (l, r, top, bottom) = (area.x, area.right() - 1, area.y, area.bottom() - 1);
@@ -729,8 +731,8 @@ impl HudState {
             ]),
             kv("sessions", format!("{live} live · {busy} busy"), t.fg),
             kv("agents", format!("{agents} running"), t.agent),
-            kv("uplink", format!("⇡ {}/m", fmt_n(up)), t.accent),
-            kv("downlink", format!("⇣ {}/m", fmt_n(down)), t.hi),
+            kv("uplink", format!("⇡ {}/s", fmt_n(up)), t.accent),
+            kv("downlink", format!("⇣ {}/s", fmt_n(down)), t.hi),
             kv("burn", format!("{}/h API-equiv.", vitals::money(rate)), t.dim),
             kv("view", view, t.dim),
         ];
@@ -742,7 +744,7 @@ impl HudState {
         }
 
         if self.director.on {
-            self.director.draw(f, area, t, world, order, names);
+            self.director.draw(f, area, t, world, order, names, engine);
             return;
         }
 
@@ -989,13 +991,13 @@ fn build(
     let now = world.now;
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
-    let up: u64 = world.sessions.iter().map(|s| s.tok_up.per_min(now)).sum();
-    let down: u64 = world.sessions.iter().map(|s| s.tok_down.per_min(now)).sum();
+    let up: u64 = world.sessions.iter().map(|s| s.tok_up.per_sec(now)).sum();
+    let down: u64 = world.sessions.iter().map(|s| s.tok_down.per_sec(now)).sum();
     nodes.push(Node {
         id: "core".into(),
         kind: NodeKind::Core,
         label: "◆ CORE".into(),
-        sub: format!("⇡{} ⇣{}", fmt_n(up), fmt_n(down)),
+        sub: format!("⇡{}/s ⇣{}/s", fmt_n(up), fmt_n(down)),
         parent: None,
         session: None,
         target: (0.0, 0.0, 0.0),
@@ -1187,7 +1189,7 @@ fn target_lines(h: &Hit, world: &World, t: &Theme) -> Vec<Line<'static>> {
                 kv("title", s.title.clone()),
                 kv("status", if s.alive { s.status.clone() } else { "ended".into() }),
                 kv("model", format!("{} · ctx {} of {}", short_model(&s.agents[0].model), fmt_n(fc.ctx), fmt_n(fc.limit))),
-                kv("flow", format!("⇡ {}/m · ⇣ {}/m", fmt_n(s.tok_up.per_min(now)), fmt_n(s.tok_down.per_min(now)))),
+                kv("flow", format!("⇡ {}/s · ⇣ {}/s", fmt_n(s.tok_up.per_sec(now)), fmt_n(s.tok_down.per_sec(now)))),
                 kv(
                     "cache",
                     format!("{} · {} so far", s.cache_ratio(now, 60).map_or("–".into(), |r| format!("{:.0}% hits", r * 100.0)), vitals::money(s.cost_micros)),
@@ -1249,14 +1251,14 @@ fn target_lines(h: &Hit, world: &World, t: &Theme) -> Vec<Line<'static>> {
             vec![head(format!("SKILL · {skill}"), t.skill), kv("uses", uses.to_string())]
         }
         _ => {
-            let up: u64 = world.sessions.iter().map(|s| s.tok_up.per_min(now)).sum();
-            let down: u64 = world.sessions.iter().map(|s| s.tok_down.per_min(now)).sum();
+            let up: u64 = world.sessions.iter().map(|s| s.tok_up.per_sec(now)).sum();
+            let down: u64 = world.sessions.iter().map(|s| s.tok_down.per_sec(now)).sum();
             let out: u64 = world.sessions.iter().map(|s| s.tokens().output).sum();
             let cost: u64 = world.sessions.iter().map(|s| s.cost_micros).sum();
             vec![
                 head("CORE · this machine".into(), t.hi),
                 kv("sessions", world.sessions.iter().filter(|s| s.alive).count().to_string()),
-                kv("flow", format!("⇡ {}/m · ⇣ {}/m", fmt_n(up), fmt_n(down))),
+                kv("flow", format!("⇡ {}/s · ⇣ {}/s", fmt_n(up), fmt_n(down))),
                 kv("output", format!("{} tokens in total", fmt_n(out))),
                 kv("price", format!("{} API-equivalent", vitals::money(cost))),
             ]
@@ -1573,7 +1575,7 @@ mod tests {
         let mut hud = HudState::new();
         hud.set_flat(true);
         hud.settle = true;
-        term.draw(|f| hud.draw(f, area, t, false, &world, &[0], &names, &[], &[])).unwrap();
+        term.draw(|f| hud.draw(f, area, t, false, &world, &[0], &names, &[], &[], None)).unwrap();
         assert!(hud.hits.iter().any(|h| h.id == "m:claude_ai_Notion"), "the MCP server is on the outer ring");
 
         let s = hud.hits.iter().find(|h| h.kind == NodeKind::Session).unwrap().clone();
@@ -1589,7 +1591,7 @@ mod tests {
         let before = hud.to_canvas(col, row).unwrap();
         hud.on_mouse(ev(MouseEventKind::ScrollUp));
         hud.settle = true; // land the camera glide in one frame
-        term.draw(|f| hud.draw(f, area, t, false, &world, &[0], &names, &[], &[])).unwrap();
+        term.draw(|f| hud.draw(f, area, t, false, &world, &[0], &names, &[], &[], None)).unwrap();
         let after = hud.to_canvas(col, row).unwrap();
         assert!(hud.zoom > 1.0);
         assert!((before.0 - after.0).abs() < 1e-6 && (before.1 - after.1).abs() < 1e-6);
@@ -1616,7 +1618,7 @@ mod tests {
         let names = HashMap::new();
         let mut hud = HudState::new();
         hud.settle = true;
-        term.draw(|f| hud.draw(f, area, t, false, &world, &[0], &names, &[], &[])).unwrap();
+        term.draw(|f| hud.draw(f, area, t, false, &world, &[0], &names, &[], &[], None)).unwrap();
         let s = hud.hits.iter().find(|h| h.kind == NodeKind::Session).unwrap().clone();
         let (col, row) = cell_of(&hud, &s, 120.0, 40.0);
         hud.on_mouse(MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: col, row, modifiers: KeyModifiers::NONE });

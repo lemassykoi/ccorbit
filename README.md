@@ -170,6 +170,11 @@ again shows once, with a count) announce:
 - a slow or looping call;
 - a collision.
 
+A toast fades on its own after about five seconds: one that appeared while the director ran and
+"disappeared when the mouse moved" had simply expired (a second real input retires the director,
+which is by design, and the plain HUD takes over with its four-line event list). Toasts are not
+suppressed in director mode: a second screen should still say NEEDS YOU.
+
 ## Readings
 
 | Reading | What it is | Where it comes from |

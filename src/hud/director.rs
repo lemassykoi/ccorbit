@@ -176,7 +176,8 @@ impl Director {
     }
 
     /// The caption bar along the bottom and the inset on the busiest session.
-    pub fn draw(&self, f: &mut Frame, area: Rect, t: &Theme, world: &World, order: &[usize], names: &HashMap<usize, String>) {
+    #[allow(clippy::too_many_arguments)] // screen, theme, world and the engine share all belong to the shot
+    pub fn draw(&self, f: &mut Frame, area: Rect, t: &Theme, world: &World, order: &[usize], names: &HashMap<usize, String>, engine: Option<f64>) {
         let Some(shot) = &self.shot else { return };
         let w = area.width.saturating_sub(6);
         let bar = Rect::new(area.x + 3, area.bottom().saturating_sub(4), w, 2);
@@ -238,14 +239,14 @@ impl Director {
         let mut wave = vec![Span::raw(" ")];
         wave.extend(vitals::brainwave(s, now, (shot.born.elapsed().as_millis() / 90) as usize, iw.saturating_sub(2).min(60), None, t));
         let mut cache = vec![Span::raw(" ")];
-        cache.extend(vitals::reactor(s, now, shot.born.elapsed().as_millis(), t, None));
+        cache.extend(vitals::reactor(s, now, shot.born.elapsed().as_millis(), t, engine));
         cache.push(Span::styled(format!("  {} · {}/h", vitals::money(s.cost_micros), vitals::money(vitals::money_rate(s, now))), Style::new().fg(t.dim)));
         let lines = vec![
             Line::from(Span::styled(format!(" {}", clip(&step, iw.saturating_sub(1))), Style::new().fg(t.fg))),
             Line::from(wave),
             Line::from(vec![
-                Span::styled(format!(" ⇡ {}/m", fmt_n(s.tok_up.per_min(now))), Style::new().fg(t.accent)),
-                Span::styled(format!("  ⇣ {}/m", fmt_n(s.tok_down.per_min(now))), Style::new().fg(t.hi)),
+                Span::styled(format!(" ⇡ {}/s", fmt_n(s.tok_up.per_sec(now))), Style::new().fg(t.accent)),
+                Span::styled(format!("  ⇣ {}/s", fmt_n(s.tok_down.per_sec(now))), Style::new().fg(t.hi)),
                 Span::styled(format!("  ctx {}", fmt_n(s.agents[0].ctx)), Style::new().fg(t.dim)),
             ]),
             Line::from(cache),
