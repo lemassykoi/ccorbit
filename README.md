@@ -26,13 +26,21 @@ few percent while it animates.
 
 ## Install
 
-This fork is not on crates.io or Homebrew (the upstream releases there are the Claude Code
-original). Build it from this repository — Rust 1.85 or newer:
+Prebuilt binaries for Linux, macOS and Windows (x86_64 and Apple silicon), from this fork's
+releases:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/lemassykoi/ccorbit/releases/latest/download/ccorbit-installer.sh | sh
+```
+
+Or build from this repository — Rust 1.85 or newer:
 
 ```sh
 git clone https://github.com/lemassykoi/ccorbit.git && cd ccorbit
-cargo install --path .        # or: cargo build --release, and run target/release/ccorbit
+cargo install --path .
 ```
+
+It is not on crates.io: that name is the upstream Claude Code original.
 
 Then run it:
 
