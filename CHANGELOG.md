@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-10-19
 
 - **The live source is opencode** (fork): sessions, prompts, steps, subagents, skills, MCP
   servers, tokens, compactions and the code city are read from opencode's storage database,
