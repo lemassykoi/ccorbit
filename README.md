@@ -4,15 +4,17 @@
 [![crates.io](https://img.shields.io/crates/v/ccorbit.svg)](https://crates.io/crates/ccorbit)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-A live terminal view of every Claude Code session running on your machine. It shows sessions,
-subagents, workflows, skills, MCP servers, token flow, cost and context, as a wall of cards, a
+**This is a local fork:** the live source is [opencode](https://opencode.ai) rather than Claude
+Code, and the sessions shown are the ones talking to the LLM lanes served on this machine. It shows
+sessions, subagents, skills and MCP servers, token flow, cost and context, as a wall of cards, a
 live tree per session, a 3D hologram you can turn with the mouse, and a city of the files being
-worked on.
+worked on. An optional read-only [engine pulse](#the-engine-pulse) sits in the footer.
 
-It is a single Rust binary of about 1.2 MB. It only reads the files Claude Code already writes: it
-never writes, never runs a command and never opens a network connection (the one opt-in exception
-is [jumping to a session's tab](#jump-to-a-session)). It uses 2 to 3% CPU and
-9 to 13 MB of memory, the 3D hologram included.
+It is a single Rust binary of about 3.3 MB (SQLite rides along). It only reads the files opencode
+already writes — its storage database, opened read-only: it never writes, never runs a command and
+opens no network connection, except the opt-in [engine pulse](#the-engine-pulse) and
+[jumping to a session's tab](#jump-to-a-session). It uses 2 to 3% CPU and
+9 to 15 MB of memory, the 3D hologram included.
 
 ![ccorbit in demo mode: the wall of sessions, a session's vitals, the 3D hologram, the director and the code city](docs/demo.gif)
 
@@ -50,12 +52,10 @@ Then run it:
 ccorbit              # the wall of sessions
 ccorbit --hud        # start on the 3D hologram
 ccorbit --director   # the hologram with the camera running itself, for a second screen
-ccorbit --demo       # made-up sessions: try it without Claude Code running
+ccorbit --demo       # made-up sessions: try it without opencode running
 ```
 
-It runs on macOS, Linux and Windows, in any terminal with mouse support. It is used daily on macOS
-and tested on all three by CI. On Windows it has not yet been tried against real Claude Code
-sessions, so reports are welcome; under WSL, the Linux build works where Claude Code runs in WSL.
+It runs wherever opencode runs. Where this fork is used daily: Linux on aarch64 (NVIDIA GB10).
 Gradients and fog look best with 24-bit color (Ghostty, iTerm2, WezTerm, kitty, Warp and Windows
 Terminal all have it); other terminals get the nearest 256-color shades.
 
@@ -191,14 +191,33 @@ again shows once, with a count) announce:
 
 | Reading | What it is | Where it comes from |
 |---|---|---|
-| Brainwave | Time spent thinking, writing and waiting for tools, summed over all agents | The gaps between transcript records: Claude Code writes each thinking block, text and tool call when it is complete, and each tool result when the tool returns. Thinking text is not in the transcript; only its size and timing are used. |
-| Cache reactor `◉ 97%` | Share of the input served from the prompt cache over five minutes; `✺` flares when the cache is rebuilt | The `usage` of each API call |
-| Price `≈$12.40` | What the tokens would cost on the Anthropic API | Built-in list prices (October 2026), including cache write and read rates and fast mode. A subscription does not bill this way. Models missing from the list are left out. |
-| Compaction ceiling | Context against the largest automatic compaction seen with the same model, and calls left at the current pace | `compact_boundary` records. Claude Code can compact earlier than the ceiling. |
+| Brainwave | Time spent thinking, writing and waiting for tools, summed over all agents | The gaps between opencode's rows. A `reasoning`, `text` or `tool` part is read once its row settles, so the interval lands where the model stopped. Reasoning text is not kept; only its timing is used. |
+| Cache reactor `◉ 97%` | Share of the input served from the prompt cache over five minutes; `✺` flares when the cache is rebuilt | The `usage` of each call. opencode reports `cache.read` at zero for a local engine, so the engine-level hit share is shown in the footer's [engine pulse](#the-engine-pulse) instead. |
+| Price `≈$12.40` | What the tokens would cost on the Anthropic API | Built-in list prices (October 2026). A local model has no list price, so ccorbit falls back to the cost opencode itself records per `step-finish`, and a model with neither is left out. |
+| Compaction ceiling | Context against the largest automatic compaction seen with the same model, and calls left at the current pace | opencode's `compaction` parts. opencode can compact earlier than the ceiling. |
 | `⚠ 9× usual` | A call running far longer than calls of its kind | Durations of finished calls, by tool, by program for shell commands and by agent type. A warning needs at least 5 minutes and 5 earlier calls, and 8 times the usual duration. |
 | `⚠ ×4 in a row` | An agent repeating the exact same call, or failing with the same tool again and again | Tool name and input |
 | `✖ collision` | A file changed by two sessions (or by two agents of one session at work at the same time) within 15 minutes | Edit and write results |
-| `△ 8m behind · ETA 12m` | A running workflow against the last earlier run of the same workflow, or of one with the same phases | Earlier runs' `wf_*.json` records |
+| `△ 8m behind · ETA 12m` | A running workflow against the last earlier run of the same workflow, or of one with the same phases | Earlier workflow runs. opencode has no workflows, so this reading stays dark on the live source; `--replay` and `--demo` still show it. |
+
+### The engine pulse
+
+With `--engines <FILE>` ccorbit reads, every two seconds, a small read-only status from the local
+LLM engines you list — the share of prompts served from the KV/prefix cache, how full the pool is,
+how many requests run, the decode rate and time-to-first-token — and shows one short line per
+engine in the footer. The file is a JSON array, for example:
+
+```json
+[
+  { "name": "vllm", "url": "http://127.0.0.1:30000/metrics", "kind": "vllm", "key_file": "~/.config/qwen38/api-key" },
+  { "name": "strata", "url": "http://10.0.0.51:8013/status", "kind": "strata", "key_file": "~/.config/strata/api-key" }
+]
+```
+
+`kind` is `vllm` (a Prometheus `/metrics`) or `strata` (a llama.cpp-style `/status`); it is
+inferred from the url when left out. Only `http://` is read, replies are capped, and the addresses
+are exactly those you wrote — this is the one place ccorbit opens a socket, and it is off unless
+you pass `--engines`.
 
 ## Keys
 
@@ -220,48 +239,55 @@ again shows once, with a count) announce:
 | `--fps <N>` | Frames per second of the hologram, default 30 (60 costs about 5% CPU) |
 | `--demo` | Show made-up sessions instead of yours: to try it, or to record it without showing your work |
 | `--allow-jump` | Let `o` bring forward the terminal tab of a session (runs `open`; see [Jump to a session](#jump-to-a-session)) |
-| `--replay <FILE>` | Play back a recorded transcript (`~/.claude/projects/<project>/<session>.jsonl`) |
+| `--replay <FILE>` | Play back a recorded transcript in the transcript format (`.jsonl`), at speed |
 | `--speed <N>` | Replay speed, default 20 (idle stretches are skipped) |
 | `--theme <NAME>` | `phosphor` (default), `amber` or `neon` |
-| `--claude-dir <DIR>` | Claude Code data directory, default `$CLAUDE_CONFIG_DIR`, or `.claude` in your home folder (`%USERPROFILE%` on Windows) |
+| `--opencode-db <PATH>` | opencode storage database, default `$XDG_DATA_HOME/opencode/opencode.db` |
+| `--engines <FILE>` | JSON file listing the local LLM engines to show a read-only pulse of (see [The engine pulse](#the-engine-pulse)) |
 | `--no-boot` | Skip the boot animation |
 | `--dump` | Print every session and its readings as plain text, then exit |
 | `--help`, `--version` | Print the options, or the version, then exit |
 
 ## What it reads
 
-Only files Claude Code already writes, under `~/.claude`. No hook, no settings change, no command,
-no network. The exception, off by default, is `--allow-jump` (see above).
+Only the files opencode already writes, opened read-only. No hook, no settings change, no command;
+the network is touched only by `--engines` (see above) and `--allow-jump` (see above).
 
 | Path | Used for |
 |---|---|
-| `sessions/<pid>.json` | Which sessions run now. The `.key` files beside them are never opened. A session counts as running while its process exists (checked with signal 0, which sends nothing; on Windows, by asking for the process's exit code). |
-| `projects/<folder>/<session>.jsonl` | Prompts, steps, results, token usage, compactions, background task notices, title |
-| `projects/<folder>/<session>/subagents/` | Subagents, and the agents of running workflows (`subagents/workflows/<run>/`) |
-| `projects/<folder>/<session>/workflows/wf_*.json` | Finished workflow runs: phases, agents, durations |
+| `session` (table) | Which sessions ran recently: id, parent, directory, title, model, times |
+| `message` (table) | Prompts and answers: role, model, when the turn completed |
+| `part` (table) | Steps and their states, reasoning and text timings, token usage per step, compactions, subagent launches, file edits |
+| `permission` (table) | Not read yet: a question waiting shows as its unanswered `question` tool call |
+| `~/.config/opencode/opencode.json` | The `mcp` server names, so a tool called `server_tool` is recognized as MCP |
 
-Transcripts hold your work. ccorbit keeps one-line summaries, counts and times in memory: never
-message bodies, file contents or edited text. It never writes anything anywhere.
+Rows hold your work. ccorbit keeps one-line summaries, counts and times in memory: never message
+bodies, reasoning text, edited text or file contents. It never writes anything anywhere; the
+database is opened `READ_ONLY` and WAL readers never block the writer.
 
 ## Limits
 
-- The transcript format is not a documented interface. This was built against Claude Code 2.1 and
-  may need changes when the format moves.
-- Token rates are counted when each response is written, so a long reply shows as a burst.
+- The storage schema is not a documented interface. This was built against opencode 1.19 and may
+  need changes when it moves; a query failure reopens the database on the next tick.
+- Token rates are counted when each `step-finish` row settles, so a long reply shows as a burst.
 - "Sent" counts every input token the model processes, cache reads included, which is why it is
   much larger than "generated".
-- Network bytes are not in any file; the session view shows how fast its transcripts grow instead.
-- Agents of a workflow that had already finished when ccorbit started come from the run's record,
-  without their steps.
-- A background task launched before the current Claude Code process started is shown as lost.
-- Jumping to a session works on macOS only, and reaches the exact tab in Warp only (other
-  terminals give no focus link, so ccorbit brings the app forward).
+- A local engine reports its cache hits only in aggregate: the per-session cache reactor reads
+  zero while the footer's engine pulse carries the true share (from the engine's counters).
+- A session quiet for an hour drops off the wall (a closed chat leaves no trace in the database);
+  its card returns the moment anything is written to it again.
+- Nothing in the database says "this opencode process died": a turn left open with no row moving
+  for ten minutes is treated as crashed, and its open calls close as lost. A legitimate tool that
+  runs silent past ten minutes shows idle meanwhile and heals itself on the next row. A question
+  waiting for an answer is never closed this way: it keeps its NEEDS YOU.
+- Jumping to a session works on macOS only, and reaches the exact tab in Warp only (opencode
+  sessions share one server process, so on other platforms `o` reports the app, not the tab).
 
 ## Development
 
 The repository is set up so that a coding agent (or a person) can change it safely:
 [AGENTS.md](AGENTS.md) is the map, `docs/` holds the architecture, the promises and the checks that
-enforce them, the transcript format and the decisions, and one command checks everything:
+enforce them, the format of the rows read and the decisions, and one command checks everything:
 
 ```sh
 scripts/verify.sh              # formatting, lints, tests, golden screens, rules, budgets (CI runs it too)
@@ -273,8 +299,9 @@ cargo run --release -- --dump  # check the readings against your own sessions
 | File | Role |
 |---|---|
 | `src/main.rs` | Options and startup |
-| `src/source.rs` | Live discovery and file following, replay, workflow history |
-| `src/tail.rs` | Follows an append-only file by byte offset, holding back partial lines |
+| `src/source.rs` | The three sources — live opencode, replay, demo — and the `World` clock |
+| `src/opencode.rs` | The live source: reads opencode's storage database, translates rows into transcript records |
+| `src/engines.rs` | The read-only engine pulse: vLLM Prometheus and llama.cpp-style status over one short HTTP GET each |
 | `src/model.rs` | Session state built from transcript lines: steps, agents, tokens, phases, files, compactions |
 | `src/insight.rs` | Readings across sessions: slow and looping calls, collisions, workflow races, compaction ceilings |
 | `src/price.rs` | API list prices |

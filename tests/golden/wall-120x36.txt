@@ -1,10 +1,10 @@
-▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$343/h
 ╔ ⠦ webapp·12 ═════════════════════════════════════ BUSY  ╗ ╭ ⠦ webapp·47 ───────────────────────────────────── BUSY  ╮
 ║Checkout redesign                                        ║▌│Server-side rendering                                    │▌
 ║⠦ model      thinking or writing the next step       1.3s║▌│⠦ model      thinking or writing the next step       2.1s│▌
 ║✖ checkout.tsx  △ on pace · ETA 3m29s  ◆ 3 running of 5  ║▌│✖ checkout.tsx  ◆ 1 agent  ⇄ github, linear              │▌
-║⇡ 3.2M/m ⇣  16k/m ·▸····▸····▸····▸····▸····▸· ██░░░░ 36%║▌│⇡ 2.9M/m ⇣ 3.7k/m ·▸····▸····▸····▸····▸····▸· ███░░░ 50%│▌
-║⢤⡴⠋⠳⠤⠞⠳⠤⠴⠛⢦⡴⠋⢳⣠⠖⠲⣄⡖⠛⢦⡴⠒⢦⣠⠞⠳⣤⠞⠓⣆⡴⠛⠦⠤ ◉ 96% ≈$9.55 opus-5-5║▌│⢤⡴⠛⠦⣤⠞⠳⣤⠞⠓⢦⡴⠛⢦⡴⠒⠲⣤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠞⠳⣄⡼⠙⠦⠤ ◉ 95% ≈$7.61 opus-5-5│▌
+║⇡  56k/s ⇣  422/s ·▸····▸····▸····▸····▸····▸· ██░░░░ 36%║▌│⇡  32k/s ⇣   49/s ·▸····▸····▸····▸····▸····▸· ███░░░ 50%│▌
+║⠴⠛⢦⡴⠋⠳⠤⠞⠳⠤⠴⠛⢦⡴⠋⢳⣠⠖⠲⣄⡖⠛⢦⡴⠒⢦⣠⠞⠳⣤⠞⠓⣆⡴⠛⠦⠤ ◉ 96% ≈$10 opus-5-5║▌│⣤⠞⠙⢦⡴⠛⠦⣤⠞⠳⣤⠞⠓⢦⡴⠛⢦⡴⠒⠲⣤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠞⠳⣄⡼⠙⠦⠤ ◉ 95% ≈$8 opus-5-5│▌
 ║› run the tests and fix what breaks                      ║▌│› cache rendered pages for a minute                      │▌
 ╚═════════════════════════════════════════════════════════╝▌╰─────────────────────────────────────────────────────────╯▌
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
@@ -12,22 +12,22 @@
 │Rate limiter per tenant                                  │▌│Docs search                                              │▌
 │✓ Read …/api/main.go                              13s ago│▌│⠦ linear get_issue · ENG-412                         1.9s│▌
 │◆ 2 agents  ✦ 1 skill  ⇄ github, linear                  │▌│◆ 1 agent  ⇄ github, linear                              │▌
-│⇡ 4.7M/m ⇣ 8.0k/m ·▸····▸····▸····▸····▸····▸· ██████ 96%│▌│⇡ 1.7M/m ⇣ 3.5k/m ·▸····▸····▸····▸····▸····▸· █░░░░░ 21%│▌
-│⠴⠛⢦⡴⠚⠳⠤⠞⠳⣄⡴⠛⢦⡴⠛⠲⣤⠞⠳⣄⡞⠙⢦⡴⠋⢧⣠⠏⠳⣤⠞⠙⠦⠤ ◉ 96% ≈$14.09 opus-5-5│▌│⠏⠧⠤⠖⠻⣄⡴⠒⢦⡴⠒⢲⣠⠞⠳⣄⡴⠒⢦⡴⠒⢲⣠⠞⠳⣄⡞⠙⣆⡴⠛⠦⠤ ◉ 95% ≈$2.18 sonnet-5-5│▌
+│⇡  62k/s ⇣   96/s ·▸····▸····▸····▸····▸····▸· ██████ 96%│▌│⇡  28k/s ⇣   26/s ·▸····▸····▸····▸····▸····▸· █░░░░░ 21%│▌
+│⠞⠙⣆⡴⠛⢦⡴⠚⠳⠤⠞⠳⣄⡴⠛⢦⡴⠛⠲⣤⠞⠳⣄⡞⠙⢦⡴⠋⢧⣠⠏⠳⣤⠞⠙⠦⠤ ◉ 96% ≈$14 opus-5-5│▌│⠟⢦⡤⠏⠧⠤⠖⠻⣄⡴⠒⢦⡴⠒⢲⣠⠞⠳⣄⡴⠒⢦⡴⠒⢲⣠⠞⠳⣄⡞⠙⣆⡴⠛⠦⠤ ◉ 95% ≈$2 sonnet-5-5│▌
 │› make the limiter per tenant                            │▌│› rank exact title matches first                         │▌
 ╰─────────────────────────────────────────────────────────╯▌╰─────────────────────────────────────────────────────────╯▌
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 ╭ ▸ SIGNAL FEED ──────────────────────────────────────────────────────────────────────────────────────── all sessions ╮
-│    23s ▌webapp·12        ✓ WebSearch  inline form validation accessible errors                                      │▌
-│    21s ▌docs-site        ✓ Grep       TODO|FIXME  in …/code/docs-site                                               │▌
 │    21s ▌api              ✓ Edit       …/store/redis.go                                                              │▌
 │    20s ▌webapp·12        ✓ Skill      webapp-testing                                                                │▌
 │    19s ▌webapp·47        ✓ Bash       Run the tests                                                                 │▌
 │    18s ▌api              ✓ Read       …/store/redis.go                                                              │▌
 │    15s ▌webapp·12        ✓ Bash       Run the tests                                                                 │▌
 │    14s ▌api              ✓ Read       …/api/main.go                                                                 │▌
+│    13s ▌docs-site        ◂ Done. The change is in and the tests pass.                                               │▌
 │   9.3s ▌webapp·12        ✓ Structure…                                                                               │▌
 │   6.4s ▌docs-site        ✓ github     search_issues · checkout is:open                                              │▌
+│   6.2s ▌api              ◂ Done. The change is in and the tests pass.                                               │▌
 │   6.2s ▌webapp·12        ✓ Edit       …/lib/pricing.ts                                                              │▌
 │   3.2s ▌webapp·12        ✓ Edit       …/components/CartSummary.tsx                                                  │▌
 │   1.9s ▌docs-site        ⠦ linear     get_issue · ENG-412                                                           │▌

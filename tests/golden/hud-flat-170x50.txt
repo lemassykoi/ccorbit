@@ -1,4 +1,4 @@
-▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h                 activity ▄▄▄·▅▅▇▇█·▅▇▇▇▇▅▄▅▇▅▂▅▄·
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$343/h                activity ▄▄▅▂▅▇▇▇█▂▇▇▇█▇▇▄▅▇▅▄▇▄·
 ┏━━                                                                                                                                                                    ━━┓
 ┃ ◤ SYSTEM ACTIVE                                                                                                                                                        ┃
   sessions 4 live · 3 busy
@@ -42,7 +42,7 @@
                                                  ⣠⠒ ⠈ ⠐ ⠠ ⡀                           ⢣⠘⡄⢣⠈⡆⢱⠈⡆⢱⠈⢆⠱⡀⢣          ⡀⠠ ⠐ ⠈ ⠐⢢⡀
                                                 ⠈           ⠁⡄⠁ ⠂ ⠄ ⡀ ⡀               ⢸ ⡇⢸ ⢣⠘⡄⢱⠈⡆⠘⡄⣣ ⡣ ⠄ ⠂ ⠁⡄⠁          ⠈
                                                             ⠈           ⢡ ⠁ ⠁ ⠈ ⠐ ⠐ ⢐ ⠘ ⠓⠈⠊⠈ ⠁⠈⠁⢨⠁          ⠈
-  ▸   6.4s docs-site    github search_issues · checkout is:open                     ⠸
+  ▸   6.2s api          prompt Done. The change is in and the tests pass.           ⠸
   ▸   6.2s webapp       Edit …/lib/pricing.ts
   ▸   3.2s webapp       Edit …/components/CartSummary.tsx
 ┃ ▸   1.9s docs-site    linear get_issue · ENG-412                                         drag pan · wheel zoom · click lock · v 3D · d director · space ping · 0 reset ┃

@@ -24,7 +24,7 @@ bin=target/release/ccorbit
 
 step "binary size"
 size=$(wc -c < "$bin" | tr -d ' ')
-budget=2000000
+budget=3800000
 echo "$size bytes (budget $budget)"
 [ "$size" -le "$budget" ] || fail "The binary grew past $budget bytes. Fix: drop what made it grow (a dependency, an embedded asset), or record why in docs/DECISIONS.md and raise the budget here."
 

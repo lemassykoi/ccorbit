@@ -1,59 +1,32 @@
-//! Where events come from: the live files of every running Claude Code session, or a recorded
-//! transcript played back at speed. Both only read files.
+//! Where events come from: the live opencode sessions on this machine (through `opencode`),
+//! or a recorded transcript played back at speed. Both only read files.
 
-use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::Instant;
 
 use serde_json::Value;
 
 use crate::demo::Demo;
 use crate::model::{PastRun, Session};
-use crate::tail::Tail;
+use crate::opencode::Open;
 use crate::time::{now_ms, parse_iso_ms};
-
-const REGISTRY_EVERY: Duration = Duration::from_secs(2);
-const DIRS_EVERY: Duration = Duration::from_secs(1);
 
 pub struct World {
     pub sessions: Vec<Session>,
     pub now: i64,
     pub mode: Mode,
-    /// Finished workflow runs of every project, oldest first.
+    /// Finished workflow runs of every project, oldest first. The opencode source has none.
     pub history: Vec<PastRun>,
     /// A fixed clock instead of the real one, so tests see the same moment every time.
     pub frozen: Option<i64>,
 }
 
 pub enum Mode {
-    Live(Live),
+    Opencode(Open),
     Replay(Replay),
     Demo(Demo),
-}
-
-pub struct Live {
-    pub claude_dir: PathBuf,
-    tracks: Vec<Track>,
-    last_registry: Option<Instant>,
-    last_dirs: Option<Instant>,
-}
-
-/// Files followed for one session.
-struct Track {
-    tails: Vec<(usize, Tail)>,
-    agents: HashSet<String>,
-    workflows: HashMap<PathBuf, SystemTime>,
-    /// Workflow runs already finished when first seen: their record has the agents, so their
-    /// (large) agent transcripts are not read.
-    done_runs: HashSet<String>,
-}
-
-impl Track {
-    fn new(transcript: PathBuf) -> Track {
-        Track { tails: vec![(0, Tail::new(transcript))], agents: HashSet::new(), workflows: HashMap::new(), done_runs: HashSet::new() }
-    }
 }
 
 pub struct Replay {
@@ -77,14 +50,9 @@ enum EvKind {
 }
 
 impl World {
-    pub fn live(claude_dir: PathBuf) -> World {
-        World {
-            sessions: Vec::new(),
-            now: now_ms(),
-            history: load_history(&claude_dir),
-            mode: Mode::Live(Live { claude_dir, tracks: Vec::new(), last_registry: None, last_dirs: None }),
-            frozen: None,
-        }
+    /// The live source: this machine's opencode sessions, read from its storage database.
+    pub fn opencode(db_path: PathBuf) -> World {
+        World { sessions: Vec::new(), now: now_ms(), history: Vec::new(), mode: Mode::Opencode(Open::watch(db_path)), frozen: None }
     }
 
     /// Made-up sessions, generated as they go (`--demo`).
@@ -105,11 +73,19 @@ impl World {
         matches!(self.mode, Mode::Demo(_))
     }
 
+    /// The opencode database being followed, for status lines (none in demo and replay).
+    pub fn db_path(&self) -> Option<&Path> {
+        match &self.mode {
+            Mode::Opencode(oc) => Some(&oc.db_path),
+            _ => None,
+        }
+    }
+
     /// Indexes a transcript and its subagent and workflow files for playback.
     pub fn replay(path: &Path, speed: f64) -> io::Result<World> {
         let id = path.file_stem().and_then(|s| s.to_str()).unwrap_or("replay").to_string();
         let dir = path.with_extension("");
-        let mut s = Session::new(&id, dir.clone());
+        let mut s = Session::new(&id);
         s.name = "replay".into();
         s.status = "replay".into();
         s.alive = true;
@@ -138,13 +114,10 @@ impl World {
         }
         events.sort_by_key(|e| e.at);
         let start = events.first().map_or(0, |e| e.at);
-        // Runs that ended before the replayed moment can be raced against.
-        let claude_dir = dir.parent().and_then(Path::parent).and_then(Path::parent).map(Path::to_path_buf);
-        let history = claude_dir.map(|d| load_history(&d)).unwrap_or_default();
         Ok(World {
             sessions: vec![s],
             now: start,
-            history,
+            history: Vec::new(),
             mode: Mode::Replay(Replay { events, files, next: 0, sim: start as f64, last: Instant::now(), speed, paused: false }),
             frozen: None,
         })
@@ -154,9 +127,9 @@ impl World {
     pub fn tick(&mut self) -> bool {
         let clock = self.frozen.unwrap_or_else(now_ms);
         match &mut self.mode {
-            Mode::Live(live) => {
+            Mode::Opencode(oc) => {
                 self.now = clock;
-                live_tick(live, &mut self.sessions, &mut self.history)
+                oc.tick(&mut self.sessions, self.now)
             }
             Mode::Replay(r) => replay_tick(r, &mut self.sessions, &mut self.now, false),
             Mode::Demo(d) => {
@@ -166,13 +139,15 @@ impl World {
         }
     }
 
-    /// Loads everything available now: one live scan, or the whole replay.
+    /// Loads everything available now: one live poll, or the whole replay.
     pub fn run_to_end(&mut self) {
         let clock = self.frozen.unwrap_or_else(now_ms);
         match &mut self.mode {
-            Mode::Live(live) => {
+            Mode::Opencode(oc) => {
                 self.now = clock;
-                live_tick(live, &mut self.sessions, &mut self.history);
+                oc.tick(&mut self.sessions, self.now);
+                // A second poll lets rows whose stream settled in between arrive.
+                oc.tick(&mut self.sessions, self.now);
             }
             Mode::Replay(r) => {
                 replay_tick(r, &mut self.sessions, &mut self.now, true);
@@ -201,7 +176,7 @@ impl World {
     pub fn animating(&self) -> bool {
         match &self.mode {
             Mode::Replay(r) => !r.done() && !r.paused,
-            Mode::Live(_) | Mode::Demo(_) => self.sessions.iter().any(Session::busy),
+            Mode::Opencode(_) | Mode::Demo(_) => self.sessions.iter().any(Session::busy),
         }
     }
 }
@@ -214,192 +189,6 @@ impl Replay {
     pub fn progress(&self) -> f64 {
         if self.events.is_empty() { 1.0 } else { self.next as f64 / self.events.len() as f64 }
     }
-}
-
-fn live_tick(live: &mut Live, sessions: &mut Vec<Session>, history: &mut Vec<PastRun>) -> bool {
-    let mut changed = false;
-    if live.last_registry.is_none_or(|t| t.elapsed() >= REGISTRY_EVERY) {
-        changed |= scan_registry(live, sessions);
-        live.last_registry = Some(Instant::now());
-    }
-    let scan_dirs = live.last_dirs.is_none_or(|t| t.elapsed() >= DIRS_EVERY);
-    if scan_dirs {
-        for (s, track) in sessions.iter_mut().zip(live.tracks.iter_mut()) {
-            if s.alive {
-                changed |= scan_agents(track, s);
-            }
-        }
-    }
-    for (s, track) in sessions.iter_mut().zip(live.tracks.iter_mut()) {
-        for (a, tail) in &mut track.tails {
-            let a = *a;
-            if let Ok(true) = tail.poll(|line| s.ingest(a, line)) {
-                changed = true;
-            }
-        }
-    }
-    // After the transcripts, so a finished run finds the step that launched it.
-    if scan_dirs {
-        for (s, track) in sessions.iter_mut().zip(live.tracks.iter_mut()) {
-            if s.alive {
-                changed |= scan_workflows(track, s, history);
-            }
-        }
-        live.last_dirs = Some(Instant::now());
-    }
-    changed
-}
-
-/// `~/.claude/sessions/<pid>.json` lists every running Claude Code session, whatever its project.
-fn scan_registry(live: &mut Live, sessions: &mut Vec<Session>) -> bool {
-    let mut changed = false;
-    let mut seen = HashSet::new();
-    for path in read_dir_paths(&live.claude_dir.join("sessions")) {
-        // Only the registry records; the `.key` files beside them are never opened.
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        let Some(v) = read_json(&path) else { continue };
-        let Some(pid) = v.get("pid").and_then(Value::as_i64) else { continue };
-        let Some(sid) = v.get("sessionId").and_then(Value::as_str) else { continue };
-        if !pid_alive(pid) {
-            continue;
-        }
-        seen.insert(sid.to_string());
-        let cwd = str_of(&v, "cwd");
-        let i = match sessions.iter().position(|s| s.id == sid) {
-            Some(i) => i,
-            None => {
-                let transcript = find_transcript(&live.claude_dir, cwd, sid);
-                let mut s = Session::new(sid, transcript.with_extension(""));
-                s.cwd = cwd.to_string();
-                sessions.push(s);
-                live.tracks.push(Track::new(transcript));
-                changed = true;
-                sessions.len() - 1
-            }
-        };
-        // A new session has no transcript yet, and the folder name is a guess until it does.
-        let main = &mut live.tracks[i].tails[0].1;
-        if !main.path.exists() {
-            let found = find_transcript(&live.claude_dir, cwd, sid);
-            if found.exists() {
-                sessions[i].dir = found.with_extension("");
-                *main = Tail::new(found);
-            }
-        }
-        if s_proc(&mut sessions[i], v.get("startedAt").and_then(Value::as_i64).unwrap_or(0)) {
-            changed = true;
-        }
-        let s = &mut sessions[i];
-        s.pid = pid;
-        let (name, status) = (str_of(&v, "name"), str_of(&v, "status"));
-        if !s.alive || s.name != name || s.status != status {
-            s.alive = true;
-            s.name = name.to_string();
-            s.status = status.to_string();
-            changed = true;
-        }
-    }
-    for s in sessions.iter_mut() {
-        if s.alive && !seen.contains(&s.id) {
-            s.alive = false;
-            s.status = "ended".into();
-            changed = true;
-        }
-    }
-    changed
-}
-
-fn s_proc(s: &mut Session, started: i64) -> bool {
-    let changed = s.proc_started != started;
-    s.proc_started = started;
-    changed
-}
-
-fn scan_agents(track: &mut Track, s: &mut Session) -> bool {
-    let mut changed = false;
-    let sub = s.dir.join("subagents");
-    for meta in read_dir_paths(&sub) {
-        let Some(id) = name_of(&meta).strip_prefix("agent-").and_then(|n| n.strip_suffix(".meta.json")) else { continue };
-        if track.agents.contains(id) || s.has_agent(id) {
-            continue;
-        }
-        let Some(v) = read_json(&meta) else { continue };
-        let id = id.to_string();
-        let a = s.add_agent(&id, str_of(&v, "agentType"), str_of(&v, "description"), v.get("toolUseId").and_then(Value::as_str).map(str::to_string));
-        track.tails.push((a, Tail::new(sub.join(format!("agent-{id}.jsonl")))));
-        track.agents.insert(id);
-        changed = true;
-    }
-    // Workflow agents write their transcripts under `subagents/workflows/<run>/` while the run
-    // works; a run already finished when first seen is read from its record instead.
-    for run_dir in read_dir_paths(&sub.join("workflows")) {
-        let run = name_of(&run_dir).to_string();
-        if !run.starts_with("wf_") || track.done_runs.contains(&run) {
-            continue;
-        }
-        let first_sight = !track.agents.iter().any(|k| k.starts_with(&format!("{run}/")));
-        let finished = s.dir.join("workflows").join(format!("{run}.json")).exists();
-        if finished {
-            // One last look for a run seen working (its agents keep being followed), none for
-            // one that was already over.
-            track.done_runs.insert(run.clone());
-            if first_sight {
-                continue;
-            }
-        }
-        for meta in read_dir_paths(&run_dir) {
-            let Some(id) = name_of(&meta).strip_prefix("agent-").and_then(|n| n.strip_suffix(".meta.json")) else { continue };
-            let key = format!("{run}/{id}");
-            if track.agents.contains(&key) {
-                continue;
-            }
-            let Some(v) = read_json(&meta) else { continue };
-            let a = s.add_wf_agent(&run, id, str_of(&v, "description"), str_of(&v, "workflowPhase"));
-            track.tails.push((a, Tail::new(run_dir.join(format!("agent-{id}.jsonl")))));
-            track.agents.insert(key);
-            changed = true;
-        }
-    }
-    changed
-}
-
-fn scan_workflows(track: &mut Track, s: &mut Session, history: &mut Vec<PastRun>) -> bool {
-    let mut changed = false;
-    for path in read_dir_paths(&s.dir.join("workflows")) {
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(mtime) = fs::metadata(&path).and_then(|m| m.modified()) else { continue };
-        if track.workflows.get(&path) == Some(&mtime) {
-            continue;
-        }
-        if let Some(v) = read_json(&path) {
-            s.on_workflow_json(&v);
-            if let Some(run) = PastRun::from_json(&v).filter(|r| !history.iter().any(|h| h.run_id == r.run_id)) {
-                history.push(run);
-            }
-            changed = true;
-        }
-        track.workflows.insert(path, mtime);
-    }
-    changed
-}
-
-/// Every finished workflow run on this machine, read once at start: `projects/*/*/workflows/`.
-fn load_history(claude_dir: &Path) -> Vec<PastRun> {
-    let mut runs: Vec<PastRun> = read_dir_paths(&claude_dir.join("projects"))
-        .into_iter()
-        .flat_map(|project| read_dir_paths(&project))
-        .filter(|p| p.is_dir())
-        .flat_map(|session| read_dir_paths(&session.join("workflows")))
-        .filter(|p| name_of(p).starts_with("wf_") && p.extension().and_then(|e| e.to_str()) == Some("json"))
-        .filter_map(|p| read_json(&p))
-        .filter_map(|v| PastRun::from_json(&v))
-        .collect();
-    runs.sort_by_key(|r| r.start);
-    runs
 }
 
 fn replay_tick(r: &mut Replay, sessions: &mut [Session], now: &mut i64, to_end: bool) -> bool {
@@ -495,16 +284,6 @@ fn read_at(file: &mut File, off: u64, len: usize) -> Option<String> {
     String::from_utf8(buf).ok()
 }
 
-fn find_transcript(claude_dir: &Path, cwd: &str, sid: &str) -> PathBuf {
-    let projects = claude_dir.join("projects");
-    let slug: String = cwd.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
-    let guess = projects.join(slug).join(format!("{sid}.jsonl"));
-    if guess.exists() {
-        return guess;
-    }
-    read_dir_paths(&projects).into_iter().map(|p| p.join(format!("{sid}.jsonl"))).find(|p| p.exists()).unwrap_or(guess)
-}
-
 fn read_dir_paths(dir: &Path) -> Vec<PathBuf> {
     fs::read_dir(dir).map(|rd| rd.flatten().map(|e| e.path()).collect()).unwrap_or_default()
 }
@@ -519,45 +298,4 @@ fn name_of(p: &Path) -> &str {
 
 fn str_of<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or("")
-}
-
-#[cfg(unix)]
-fn pid_alive(pid: i64) -> bool {
-    unsafe extern "C" {
-        fn kill(pid: i32, sig: i32) -> i32;
-    }
-    let Ok(pid) = i32::try_from(pid) else { return false };
-    // Signal 0 sends nothing: it only asks whether the process exists.
-    pid > 0 && unsafe { kill(pid, 0) } == 0
-}
-
-#[cfg(windows)]
-fn pid_alive(pid: i64) -> bool {
-    type Handle = *mut core::ffi::c_void;
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
-        fn GetExitCodeProcess(process: Handle, code: *mut u32) -> i32;
-        fn CloseHandle(handle: Handle) -> i32;
-    }
-    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
-    const STILL_ACTIVE: u32 = 259;
-    let Ok(pid) = u32::try_from(pid) else { return false };
-    // SAFETY: the handle is checked before use and closed once; only its exit code is queried,
-    // which needs no more than the limited query right.
-    unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if handle.is_null() {
-            return false;
-        }
-        let mut code = 0u32;
-        let ok = GetExitCodeProcess(handle, &mut code) != 0;
-        CloseHandle(handle);
-        ok && code == STILL_ACTIVE
-    }
-}
-
-#[cfg(not(any(unix, windows)))]
-fn pid_alive(_pid: i64) -> bool {
-    true
 }

@@ -1,16 +1,15 @@
 # Architecture
 
-ccorbit turns the files Claude Code writes into screens. Data flows one way:
+ccorbit turns the rows opencode writes into screens. Data flows one way:
 
 ```
-~/.claude files ──▶ source ──▶ model (Session::ingest, one record at a time) ──▶ insight ──▶ ui / hud
-   sessions/          tails, replay,      steps, agents, tokens, phases,          readings      draw frames
-   projects/          demo generator      files, compactions, workflows           across        from the
-                                                                                  sessions      state
-```
-
-- **source** finds sessions and follows their files. It knows paths and offsets, nothing about
-  what a record means.
+opencode.db ──▶ source ──▶ model (Session::ingest, one record at a time) ──▶ insight ──▶ ui / hud
+ (read-only)     opencode     steps, agents, tokens, phases,                   readings     draw frames
+                 translator,  files, compactions, workflows                    across       from the
+                 replay,      (translate rows to records; replay               sessions     state
+                 demo         and demo feed records directly)
+engine urls ──▶ engines ─────────────────────────────────────────────────────────────────▶ footer
+ (opt-in)       read-only pulse
 - **model** reads records into state. It knows the transcript format (see
   [TRANSCRIPT_FORMAT.md](TRANSCRIPT_FORMAT.md)), nothing about screens.
 - **insight** computes readings that need several sessions at once: alerts, collisions, races,
@@ -18,7 +17,7 @@ ccorbit turns the files Claude Code writes into screens. Data flows one way:
 - **ui** and **hud** draw. They read the state and never change what was read; the only state they
   own is what is on screen (selection, camera, notices).
 
-The first three are the data layer. They must not import `ratatui`, `crossterm`, `crate::ui` or
+All of these are the data layer. They must not import `ratatui`, `crossterm`, `crate::ui` or
 `crate::hud`; `tests/rules.rs` checks this.
 
 ## Modules
@@ -26,8 +25,9 @@ The first three are the data layer. They must not import `ratatui`, `crossterm`,
 | File | Layer | Role |
 |---|---|---|
 | `src/main.rs` | entry | Options (`Opts`), startup, hidden developer options, terminal setup |
-| `src/source.rs` | data | `World`: live discovery (registry every 2 s, folders every 1 s, tails every tick), replay of a transcript, the demo, workflow history, process liveness |
-| `src/tail.rs` | data | Follows an append-only file by byte offset, holding back a partial last line |
+| `src/source.rs` | data | `World`: the three sources (live opencode, replay, demo) behind one `tick`, and the clock |
+| `src/opencode.rs` | data | The live source: opens opencode's storage database read-only, follows rows per session, translates them into transcript records; subagent children hang under their task call |
+| `src/engines.rs` | data | The opt-in engine pulse: one short http GET per listed engine per 2 s, vLLM Prometheus counters and llama.cpp-style status into footer numbers |
 | `src/model.rs` | data | `Session::ingest`: steps, agents, background tasks, workflows and their live agents, tokens split by cache, phases (brainwave), files, compactions, durations by kind, price |
 | `src/parse.rs` | data | Small tolerant readers: tool kinds, summaries, workflow meta, call signatures and duration keys, paths |
 | `src/insight.rs` | data | Readings across sessions: slow and looping calls, collisions, workflow races, compaction ceilings and forecasts |
@@ -44,15 +44,17 @@ The first three are the data layer. They must not import `ratatui`, `crossterm`,
 
 ## The run loop
 
-`ui::run` ticks the world every 250 ms (80 ms in replay), turns new events into notices, and
+`ui::run` ticks the world every 250 ms (80 ms in replay), polls the engines (throttled to 2 s
+inside), turns new events into notices, and
 draws when something changed or the frame interval passed: 30 frames a second in the hologram
 (`--fps`), about 11 on the other screens while something moves, 2 when nothing does. A frame of
 the hologram takes about half a millisecond to compute (`--bench-hud`).
 
 ## Key types
 
-- `Session` (model): one Claude Code session. `agents[0]` is the main agent; subagents and
-  workflow agents follow. Items are steps (tool calls) and prompts.
+- `Session` (model): one opencode session (or one transcript in replay, one made-up one in demo).
+  `agents[0]` is the main agent; subagents (opencode child sessions) and workflow agents follow.
+  Items are steps (tool calls) and prompts.
 - `Step`: one tool call, from its `tool_use` to its `tool_result`, plus a background task when the
   call launched one (async agent, background shell, workflow).
 - `Activity`: 64 buckets of 5 seconds, the base of every rate and trace.

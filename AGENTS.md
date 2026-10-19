@@ -1,24 +1,28 @@
 # Working on ccorbit
 
-ccorbit is a terminal view of every Claude Code session on a machine: a wall of cards, a session
-tree, a 3D hologram and a code city, drawn from the files Claude Code writes. Rust, two
-dependencies, read-only. This file is the map; the details live in `docs/`.
+ccorbit is a terminal view of every opencode session on a machine: a wall of cards, a session
+tree, a 3D hologram and a code city, drawn from the rows opencode writes to its storage database.
+Rust, three dependencies, read-only. This file is the map; the details live in `docs/`.
 
 ## Promises you must not break
 
-- The program never writes a file, never runs a command (except `open` behind `--allow-jump`) and
-  never opens a network connection.
-- It keeps summaries, counts and times, never message bodies, file contents or edited text.
-- The data layer (`source`, `model`, `parse`, `insight`, ...) never draws; `ui` and `hud` do.
-- Two runtime dependencies; a frame of the hologram well under 8 ms; a binary under 2 MB.
+- The program never writes a file, never runs a command (except `open` behind `--allow-jump`); it
+  opens a socket only for the opt-in `--engines` read-only pulse, in `src/engines.rs`.
+- The live source opens opencode's database `READ_ONLY` and never takes a write lock.
+- It keeps summaries, counts and times, never message bodies, reasoning text, file contents or edited text.
+- The data layer (`source`, `model`, `opencode`, `engines`, `parse`, `insight`, ...) never draws; `ui` and `hud` do.
+- Three runtime dependencies; a frame of the hologram well under 8 ms; a binary under 3.8 MB.
 
 Each promise and the check that enforces it: [docs/INVARIANTS.md](docs/INVARIANTS.md).
 
 ## Where things are
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the data flow and every module.
-- [docs/TRANSCRIPT_FORMAT.md](docs/TRANSCRIPT_FORMAT.md): the files and fields ccorbit reads.
-  The format is undocumented; check real files before relying on a new field.
+- [docs/OPENCODE_FORMAT.md](docs/OPENCODE_FORMAT.md): the storage tables and row fields the live
+  source reads. Undocumented upstream; check real rows before relying on a new field.
+- [docs/TRANSCRIPT_FORMAT.md](docs/TRANSCRIPT_FORMAT.md): the internal record format that
+  `Session::ingest` parses. The opencode source translates rows into it; `--replay` and `--demo`
+  feed it directly. It is the one grammar every screen is built on.
 - [docs/DECISIONS.md](docs/DECISIONS.md): why things are this way, and what was tried and
   rejected (pixel mode, early warning thresholds, ...). Read it before proposing a change in the
   same area.

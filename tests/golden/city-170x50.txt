@@ -1,4 +1,4 @@
-▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h                 activity ▄▄▄·▅▅▇▇█·▅▇▇▇▇▅▄▅▇▅▂▅▄·
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$343/h                activity ▄▄▅▂▅▇▇▇█▂▇▇▇█▇▇▄▅▇▅▄▇▄·
 ╭ ◢ CODE CITY · 17 files, 16 changed · last 24 hours ──────────────────────────────── height = lines changed · [ ] window ╮ ╭ ◢ LOT ────────────────────────────────────╮
 │  src/components/CartSummary.tsx edited 2.9s ago · +29 −8 · webapp·12                                                    │▌│src/components/CartSummary.tsx             │▌
 │                                                                                                                         │▌│last     now · webapp·12 · review:security │▌

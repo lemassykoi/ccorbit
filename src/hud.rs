@@ -643,6 +643,7 @@ impl HudState {
                     (Feed::Done, Some(id)) => self.packets.push(packet(&id, &sid, t.ok)),
                     (Feed::Failed, Some(id)) => self.packets.push(packet(&id, &sid, t.err)),
                     (Feed::Failed, None) => self.spark(&sid, format!("✗ {}", it.label), t.err, now),
+                    (Feed::Answer, Some(id)) => self.packets.push(packet(&id, "core", t.dim)),
                     (_, None) => self.spark(&sid, it.label.clone(), color, now),
                 }
             }

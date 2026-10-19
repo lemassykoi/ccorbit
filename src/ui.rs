@@ -21,6 +21,7 @@ mod city;
 pub(crate) mod vitals;
 
 use crate::Opts;
+use crate::engines::Engines;
 use crate::hud::{HudAction, HudState};
 use crate::insight::{self, Alert, Collision, Warn};
 use crate::model::{Feed, Item, Kind, Phase, Session, Step};
@@ -98,6 +99,8 @@ struct App {
     /// Warnings and collisions already announced, and compactions counted, per session.
     warned: HashSet<String>,
     compacted: HashMap<String, usize>,
+    /// The local LLM engines listed with `--engines`, polled for a pulse in the footer.
+    engines: Engines,
 }
 
 /// A short notice in the bottom right corner: an agent or workflow finished, a step failed, a
@@ -175,6 +178,7 @@ impl App {
             fps: opts.fps,
             warned: HashSet::new(),
             compacted: HashMap::new(),
+            engines: opts.engines.as_deref().map(Engines::load).unwrap_or_else(Engines::none),
         }
     }
 
@@ -263,6 +267,7 @@ pub fn run(term: &mut DefaultTerminal, mut world: World, opts: &Opts) -> io::Res
     loop {
         if last_tick.elapsed() >= tick_every {
             dirty |= world.tick();
+            dirty |= app.engines.poll();
             dirty |= collect_toasts(&mut app, &world);
             last_tick = Instant::now();
         }
@@ -620,7 +625,7 @@ fn help(f: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::raw(""),
         Line::from(vec![head("COLORS"), d("a session keeps one color on its card, tower, feed lines and HUD node")]),
-        Line::from(vec![head("DATA"), d("read-only: ~/.claude sessions, transcripts, subagents, workflows · no network")]),
+        Line::from(vec![head("DATA"), d("read-only: opencode sessions, messages, parts · never writes")]),
     ];
     let lines: Vec<Line> = lines.into_iter().map(|l| l.patch_style(Style::new())).collect();
     f.render_widget(Paragraph::new(lines), Rect { x: inner.x + 1, width: inner.width.saturating_sub(1), ..inner });
@@ -661,10 +666,16 @@ fn boot(f: &mut Frame, area: Rect, app: &App, world: &World) {
     let live = world.sessions.iter().filter(|s| s.alive).count();
     let agents: usize = world.sessions.iter().map(|s| s.agents.len()).sum();
     let mcp: usize = world.sessions.iter().map(|s| s.mcp.len()).sum();
+    let db = world.db_path().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(|| "storage".into());
     let lines = [
-        format!("{} TERMINAL v{}  ·  READ-ONLY  ·  NO NETWORK", t.name.to_uppercase(), env!("CARGO_PKG_VERSION")),
-        format!("> scanning ~/.claude/sessions ........ {live} live"),
-        format!("> following transcripts .............. {agents} agents"),
+        format!(
+            "{} TERMINAL v{}  ·  READ-ONLY  ·  {}",
+            t.name.to_uppercase(),
+            env!("CARGO_PKG_VERSION"),
+            if app.engines.list.is_empty() { "NO NETWORK" } else { "ENGINE PULSE ON" }
+        ),
+        format!("> reading {db} .............. {live} live"),
+        format!("> following parts .............. {agents} agents"),
         format!("> mcp connections seen ............... {mcp}"),
         "> ready".to_string(),
     ];
@@ -744,10 +755,10 @@ fn header(f: &mut Frame, area: Rect, app: &App, world: &World, ins: &Insights) {
         ));
         left.push(Span::raw("  "));
     }
-    let up: u64 = world.sessions.iter().map(|s| s.tok_up.per_min(world.now)).sum();
-    let down: u64 = world.sessions.iter().map(|s| s.tok_down.per_min(world.now)).sum();
-    left.push(Span::styled(format!("⇡ {}/m ", fmt_n(up)), Style::new().fg(t.accent)));
-    left.push(Span::styled(format!("⇣ {}/m ", fmt_n(down)), Style::new().fg(t.hi)));
+    let up: u64 = world.sessions.iter().map(|s| s.tok_up.per_sec(world.now)).sum();
+    let down: u64 = world.sessions.iter().map(|s| s.tok_down.per_sec(world.now)).sum();
+    left.push(Span::styled(format!("⇡ {}/s ", fmt_n(up)), Style::new().fg(t.accent)));
+    left.push(Span::styled(format!("⇣ {}/s ", fmt_n(down)), Style::new().fg(t.hi)));
     let rate: u64 = world.sessions.iter().filter(|s| s.alive).map(|s| vitals::money_rate(s, world.now)).sum();
     if rate > 0 {
         left.push(Span::styled(format!("{}/h", vitals::money(rate)), Style::new().fg(t.dim)));
@@ -799,11 +810,14 @@ fn footer(f: &mut Frame, area: Rect, app: &App, world: &World) {
         spans.push(Span::styled(" <> ", Style::new().fg(t.bg).bg(t.dim)));
         spans.push(Span::styled(" speed  ", Style::new().fg(t.dim)));
     }
-    let right = vec![
-        Span::styled(" ? ", Style::new().fg(t.bg).bg(t.accent)),
-        Span::styled(" help  ", Style::new().fg(t.dim)),
-        Span::styled(format!("{} ", t.name), Style::new().fg(t.faint)),
-    ];
+    let mut right = Vec::new();
+    // The engines the person listed with --engines: one short pulse line each, on the right.
+    for strip in app.engines.strips() {
+        right.push(Span::styled(format!("{strip}  "), Style::new().fg(t.accent)));
+    }
+    right.push(Span::styled(" ? ", Style::new().fg(t.bg).bg(t.accent)));
+    right.push(Span::styled(" help  ", Style::new().fg(t.dim)));
+    right.push(Span::styled(format!("{} ", t.name), Style::new().fg(t.faint)));
     f.render_widget(Paragraph::new(fit(spans, String::new(), Style::new(), right, area.width as usize)), area);
 }
 
@@ -811,7 +825,7 @@ fn footer(f: &mut Frame, area: Rect, app: &App, world: &World) {
 
 fn wall(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[usize], ins: &Insights) {
     if order.is_empty() {
-        no_signal(f, area, app, "No running Claude Code session.", "Start `claude` in any project: it shows up here within 2 seconds.");
+        no_signal(f, area, app, "No running opencode session.", "Start `opencode` in any project: it shows up here within a couple of seconds.");
         return;
     }
     let cols = (area.width / CARD_W).max(1) as usize;
@@ -986,7 +1000,7 @@ fn card(f: &mut Frame, rect: Rect, app: &App, world: &World, si: usize, k: usize
 
     // The brainwave: what the session spends its time on, then the cache reactor and the price.
     let mut right = vec![Span::raw(" ")];
-    right.extend(vitals::reactor(s, cx.now, app.ms(), t));
+    right.extend(vitals::reactor(s, cx.now, app.ms(), t, app.engines.blend_hit()));
     right.push(Span::styled(format!(" {} {}", vitals::money(s.cost_micros), short_model(&s.agents[0].model)), Style::new().fg(t.faint)));
     let rw: usize = right.iter().map(Span::width).sum();
     let wave_w = w.saturating_sub(rw).min(64);
@@ -1035,6 +1049,7 @@ fn signal_feed(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usi
             let step = it.tool.as_deref().and_then(|id| s.step_by_tool(id));
             match (it.feed, step) {
                 (Feed::Prompt, _) => left.push(Span::styled("›", Style::new().fg(t.prompt))),
+                (Feed::Answer, _) => left.push(Span::styled("◂", Style::new().fg(t.fg))),
                 (Feed::Start, Some(st)) => left.push(glyph(s, st, &cx)),
                 (Feed::Failed, _) => left.push(Span::styled("✗", Style::new().fg(t.err))),
                 _ => left.push(Span::styled("✓", Style::new().fg(t.ok))),
@@ -1053,6 +1068,7 @@ fn signal_feed(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usi
             }
             let style = match it.feed {
                 Feed::Prompt => Style::new().fg(t.prompt),
+                Feed::Answer => Style::new().fg(t.fg),
                 _ if fresh => Style::new().fg(t.hi),
                 _ => Style::new().fg(t.dim),
             };
@@ -1364,7 +1380,7 @@ fn detail(f: &mut Frame, area: Rect, app: &App, world: &World, s: &Session, sel:
             lines.push(kv("context", fmt_n(ag.ctx)));
             lines.push(kv("tokens", format!("in {} · cache {} · out {}", fmt_n(tk.input), fmt_n(tk.cache_read), fmt_n(tk.output))));
             lines.push(kv("agents", format!("{} spawned · {} running", s.agents.len() - 1, s.running_agents())));
-            lines.push(kv("flow", format!("sent {}/m · generated {}/m", fmt_n(s.tok_up.per_min(now)), fmt_n(s.tok_down.per_min(now)))));
+            lines.push(kv("flow", format!("sent {}/s · generated {}/s", fmt_n(s.tok_up.per_sec(now)), fmt_n(s.tok_down.per_sec(now)))));
             if !ag.last_text.is_empty() {
                 lines.push(kv("said", ag.last_text.clone()));
             }
@@ -1535,16 +1551,16 @@ fn links(f: &mut Frame, area: Rect, app: &App, s: &Session) {
 
 // ---------------------------------------------------------------- token flow
 
-/// `⇡ 1.2M/m ⇣ 3.4k/m ▸····▸····▸ ███░░░ 45%`: tokens sent and generated over the last
-/// minute, a packet stream that moves while tokens flow, and how full the context window is.
+/// `⇡ 3.4k/s ⇣ 812/s ▸····▸····▸ ███░░░ 45%`: tokens sent and generated per second over the
+/// last bucket, a packet stream that moves while tokens flow, and how full the context window is.
 fn flow_line(s: &Session, cx: &Ctx, fc: &crate::model::Forecast, w: usize) -> Line<'static> {
     let t = cx.t;
-    let (up, down) = (s.tok_up.per_min(cx.now), s.tok_down.per_min(cx.now));
+    let (up, down) = (s.tok_up.per_sec(cx.now), s.tok_down.per_sec(cx.now));
     let left = vec![
         Span::styled(format!("⇡{:>5}", fmt_n(up)), Style::new().fg(t.accent)),
-        Span::styled("/m ", Style::new().fg(t.faint)),
+        Span::styled("/s ", Style::new().fg(t.faint)),
         Span::styled(format!("⇣{:>5}", fmt_n(down)), Style::new().fg(t.hi)),
-        Span::styled("/m ", Style::new().fg(t.faint)),
+        Span::styled("/s ", Style::new().fg(t.faint)),
     ];
     let right = vitals::ctx_gauge(fc, 6, t);
     let lw: usize = left.iter().map(Span::width).sum();
@@ -1601,17 +1617,17 @@ fn vitals_panel(f: &mut Frame, area: Rect, app: &App, world: &World, s: &Session
         ));
         lines.push(Line::from(spans));
     }
-    let (up, down) = (s.tok_up.per_min(now), s.tok_down.per_min(now));
+    let (up, down) = (s.tok_up.per_sec(now), s.tok_down.per_sec(now));
     let mut spans = vec![Span::styled(" ⇡ sent ", Style::new().fg(t.accent))];
     spans.extend(sparkline(&s.tok_up.series(now, 12), t));
-    spans.push(Span::styled(format!(" {}/m   ", fmt_n(up)), Style::new().fg(t.accent).add_modifier(Modifier::BOLD)));
+    spans.push(Span::styled(format!(" {}/s   ", fmt_n(up)), Style::new().fg(t.accent).add_modifier(Modifier::BOLD)));
     spans.push(Span::styled("⇣ generated ", Style::new().fg(t.hi)));
     spans.extend(sparkline(&s.tok_down.series(now, 12), t));
-    spans.push(Span::styled(format!(" {}/m   ", fmt_n(down)), Style::new().fg(t.hi).add_modifier(Modifier::BOLD)));
+    spans.push(Span::styled(format!(" {}/s   ", fmt_n(down)), Style::new().fg(t.hi).add_modifier(Modifier::BOLD)));
     spans.push(Span::styled(format!("log {}/s", fmt_bytes(s.bytes.per_min(now) / 60)), Style::new().fg(t.dim)));
     lines.push(Line::from(spans));
     let mut spans = vec![Span::raw(" ")];
-    spans.extend(vitals::reactor(s, now, app.ms(), t));
+    spans.extend(vitals::reactor(s, now, app.ms(), t, app.engines.blend_hit()));
     spans.push(Span::styled(
         format!(
             " cache · read {} · written {} · fresh {} (5 min)   ",
@@ -1737,7 +1753,7 @@ fn skyline(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[usi
     let t = app.t();
     let title = Line::from(vec![
         Span::styled(" ◢ SKYLINE ", Style::new().fg(t.fg).add_modifier(Modifier::BOLD)),
-        Span::styled("· height = tokens per minute ", Style::new().fg(t.faint)),
+        Span::styled("· height = tokens per second ", Style::new().fg(t.faint)),
     ]);
     let any_busy = order.iter().any(|&si| world.sessions[si].busy());
     let names = names(world, order);
@@ -1760,7 +1776,7 @@ fn skyline(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[usi
     }
     for (k, &si) in order.iter().take(n).enumerate() {
         let s = &world.sessions[si];
-        let rate = s.tok_up.per_min(now) + s.tok_down.per_min(now);
+        let rate = s.tok_up.per_sec(now) + s.tok_down.per_sec(now);
         let target = if s.alive { 1.0 + (1.0 + rate as f64 / 2000.0).log2() } else { 1.0 };
         let h = app.heights.entry(s.id.clone()).or_insert(1.0);
         *h += (target.clamp(1.0, max_h) - *h) * 0.35;
@@ -1782,7 +1798,7 @@ fn skyline(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[usi
         let label = if needs {
             "needs you".into()
         } else if rate > 0 {
-            format!("{}/m", fmt_n(rate))
+            format!("{}/s", fmt_n(rate))
         } else if s.alive {
             "idle".into()
         } else {
@@ -2458,12 +2474,14 @@ pub fn snapshot(world: &World, opts: &Opts, w: u16, h: u16) -> String {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     let mut app = App::new(opts, false);
+    // One poll each: a headless snapshot shows the pulse the run loop would have gathered.
+    app.engines.poll();
     let mut out = String::new();
     let Ok(mut term) = Terminal::new(TestBackend::new(w, h)) else { return out };
-    // The boot screen half-way through its animation, then the two views.
+    // The boot screen half-way through its animation, then every view.
     app.started = Instant::now().checked_sub(Duration::from_millis(1100)).unwrap_or_else(Instant::now);
     app.hud.settle = true;
-    for (boot, view) in [(true, View::Wall), (false, View::Wall), (false, View::Session), (false, View::Hud)] {
+    for (boot, view) in [(true, View::Wall), (false, View::Wall), (false, View::Session), (false, View::Hud), (false, View::City)] {
         app.boot = boot;
         app.view = view;
         if term.draw(|f| draw(f, &mut app, world)).is_err() {
@@ -2480,7 +2498,10 @@ pub fn snapshot(world: &World, opts: &Opts, w: u16, h: u16) -> String {
 }
 
 /// Every session, fully expanded, as plain text.
-pub fn dump(world: &mut World) -> String {
+pub fn dump(world: &mut World, opts: &Opts) -> String {
+    // The engine pulse is asked for by --engines; one poll here, so a headless dump shows it.
+    let mut engines = opts.engines.as_deref().map(Engines::load).unwrap_or_else(Engines::none);
+    engines.poll();
     let order = order(world);
     for &si in &order {
         world.sessions[si].set_all_expanded(true);
@@ -2489,7 +2510,7 @@ pub fn dump(world: &mut World) -> String {
     let cx = Ctx { t, now: world.now, frame: 0, fx: false, marks: None, world: Some(world) };
     let mut out = String::new();
     if order.is_empty() {
-        out.push_str("no running Claude Code session\n");
+        out.push_str("no running opencode session\n");
     }
     for &si in &order {
         let s = &world.sessions[si];
@@ -2522,7 +2543,11 @@ pub fn dump(world: &mut World) -> String {
         let _ = writeln!(
             out,
             "   ◉ cache {} · writes {} reads {} fresh {} (5 min) · ≈ ${:.2}{} · {} compactions · ctx {}/{}{}{}",
-            s.cache_ratio(now, 60).map_or("–".into(), |r| format!("{:.0}%", r * 100.0)),
+            if s.cache_r.sum(now, 64) + s.cache_w.sum(now, 64) == 0 {
+                "–".into()
+            } else {
+                s.cache_ratio(now, 60).map_or("–".into(), |r| format!("{:.0}%", r * 100.0))
+            },
             fmt_n(s.cache_w.sum(now, 60)),
             fmt_n(s.cache_r.sum(now, 60)),
             fmt_n(s.fresh_in.sum(now, 60)),
@@ -2561,6 +2586,9 @@ pub fn dump(world: &mut World) -> String {
         let _ = writeln!(out, "✖ collision {} · {}", c.path, who.join(" + "));
     }
     let _ = writeln!(out, "{} past workflow runs on record", world.history.len());
+    for strip in engines.strips() {
+        let _ = writeln!(out, "⚡ {strip}");
+    }
     out
 }
 
@@ -2687,7 +2715,7 @@ mod tests {
     #[test]
     fn readings_match_their_golden_copy() {
         let mut world = demo_world();
-        check_golden("demo-dump", &dump(&mut world));
+        check_golden("demo-dump", &dump(&mut world, &crate::Opts::new(std::path::PathBuf::new())));
     }
 
     #[test]

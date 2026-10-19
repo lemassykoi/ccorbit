@@ -142,7 +142,7 @@ impl Demo {
     pub fn start(now: i64) -> (Demo, Vec<Session>, Vec<PastRun>) {
         let mut sessions = Vec::new();
         for p in &PROFILES {
-            let mut s = Session::new(&format!("demo-{}", p.name), format!("/demo/{}", p.name).into());
+            let mut s = Session::new(&format!("demo-{}", p.name));
             s.name = p.name.into();
             s.cwd = p.cwd.into();
             s.alive = true;

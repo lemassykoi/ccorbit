@@ -93,9 +93,13 @@ fn span_bits(col: usize, a: usize, b: usize) -> u32 {
 
 /// `◉ 97%`: share of the input served from the prompt cache over the last five minutes. The
 /// core flares (`✺`) for a few seconds when the cache is rebuilt or warmed up.
-pub fn reactor(s: &Session, now: i64, ms: u128, t: &Theme) -> Vec<Span<'static>> {
+pub fn reactor(s: &Session, now: i64, ms: u128, t: &Theme, engine: Option<f64>) -> Vec<Span<'static>> {
     let flare = s.flares.back().is_some_and(|&(at, _)| now >= at && now - at < 8000);
-    let Some(r) = s.cache_ratio(now, 60) else {
+    // opencode never reports what the engine's prefix cache actually hit: when the session has
+    // no cache reading at all, the engine's own share (polled with --engines) is the truth, and
+    // with no engines the honest answer is `–`, not a permanent red 0%.
+    let seen = s.cache_r.sum(now, 64) + s.cache_w.sum(now, 64) > 0;
+    let Some(r) = (if seen { s.cache_ratio(now, 60) } else { engine.map(|p| p / 100.0) }) else {
         return vec![Span::styled("◌ –", Style::new().fg(t.faint))];
     };
     let color = if r >= 0.9 {
@@ -114,12 +118,13 @@ pub fn reactor(s: &Session, now: i64, ms: u128, t: &Theme) -> Vec<Span<'static>>
     vec![core, Span::styled(format!(" {:.0}%", r * 100.0), Style::new().fg(color))]
 }
 
-/// `≈$12.40`, the estimated API price so far.
+/// `≈$185`: the estimated price of the session, rounded to the dollar (cents would claim a
+/// precision the estimate has not earned). Under a dollar the cents stay, or it reads as free.
 pub fn money(micros: u64) -> String {
     let d = micros as f64 / 1e6;
     if d >= 1000.0 {
         format!("≈${:.1}k", d / 1000.0)
-    } else if d >= 100.0 {
+    } else if d >= 1.0 {
         format!("≈${d:.0}")
     } else {
         format!("≈${d:.2}")

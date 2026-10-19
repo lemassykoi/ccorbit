@@ -1,10 +1,10 @@
-▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h                 activity ▄▄▄·▅▅▇▇█·▅▇▇▇▇▅▄▅▇▅▂▅▄·
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$343/h                activity ▄▄▅▂▅▇▇▇█▂▇▇▇█▇▇▄▅▇▅▄▇▄·
 ╭ ∿ VITALS · last 5 minutes ──────────────────────────────────────────────────────────────────────────────────────────────╮ ╭ ▸ DETAIL ─────────────────────────────────╮
 │ THINK ⠴⠛⠦⠴⠒⠦⠤⠖⠲⣤⠤⠤⢤⡴⠛⠦⣤⠖⠲⠤⠖⠒⠦⠴⠒⠦⠴⠒⠲⠤⠞⠳⠤⠴⠛⠦⠴⠋⢳⡤⠖⠲⣄⡖⠛⠦⠴⠒⢦⣠⠖⠲⣤⠞⠓⣆⡴⠛⠦⠤  3m56s · 49k tok                                     │▌│tool     Edit                              │▌
 │ WRITE ⠴⠒⠦⠤⠖⠦⣤⠤⠶⠤⠖⠦⠤⠴⠦⢤⡤⠖⠲⠤⠖⠒⠦⠴⠒⠦⠤⠖⠲⠤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠖⠲⣤⠖⠛⢦⡴⠒⠦⠤⠞⠳⠤⠖⠒⠦⠴⠒⠦⠤  2m21s                                               │▌│about    …/lib/pricing.ts                  │▌
 │ TOOLS ⠴⠒⠦⠤⠤⢤⡤⠖⠲⠤⠞⠓⠦⠤⠤⠤⠤⠖⠲⣤⠖⠦⠤⠴⠒⠦⠤⠖⠲⠤⠤⠶⠤⠴⠒⠦⠴⠦⠶⠤⠖⠲⠤⠖⠒⠦⠴⠒⠦⠤⠖⠲⣤⠤⠖⠦⠴⠒⠦⠤  1m09s                                               │▌│status   done in 0.4s                      │▌
-│ ⇡ sent ▇▆▇▇·▁▇▇▁▇█· 3.2M/m   ⇣ generated ▄▃▅▃·▆▁▄▁▆█· 16k/m   log 306 B/s                                               │▌│started  6.2s ago                          │▌
-│ ◉ 96% cache · read 12M · written 489k · fresh 201 (5 min)   ✺ rebuilt 334k 1m01s ago   ≈$9.55 · ≈$83.54/h API-equivalent│▌│result   ok                                │▌
+│ ⇡ sent ▇▆▇▇·▁▇▇▁▇█· 56k/s   ⇣ generated ▄▃▅▃·▆▁▄▁▆█· 422/s   log 306 B/s                                                │▌│started  6.2s ago                          │▌
+│ ◉ 96% cache · read 12M · written 489k · fresh 201 (5 min)   ✺ rebuilt 334k 1m01s ago   ≈$10 · ≈$84/h API-equivalent     │▌│result   ok                                │▌
 │ ctx ████░░░░░░░░ 36%  355k / 968k ceiling (seen) · in ~295 calls, ~36m27s                                               │▌│                                           │▌
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯▌│                                           │▌
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘│                                           │▌

@@ -1,23 +1,17 @@
 //! Session state built from Claude Code transcript lines: agents, their steps, background
 //! tasks, workflow runs, MCP connections, skills, a short event feed and an activity histogram.
 //! Message bodies are never kept, only one-line summaries.
-
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
-
-use serde_json::Value;
-
 use crate::parse;
 use crate::price;
 use crate::time::parse_iso_ms;
-
+use serde_json::Value;
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 /// Most items kept per agent; the oldest are dropped so memory stays flat on long sessions.
 const MAX_ITEMS: usize = 4000;
 const TRIM_ITEMS: usize = 1000;
 const FEED_LEN: usize = 64;
 pub const BUCKET_MS: i64 = 5000;
 const BUCKETS: usize = 64;
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
     Agent,
@@ -30,14 +24,12 @@ pub enum Kind {
     Comms,
     Tool,
 }
-
 /// A background task launched by a step: an async agent, a background command or a workflow run.
 pub struct Bg {
     pub task_id: String,
     pub done: Option<i64>,
     pub status: String,
 }
-
 pub struct Step {
     pub id: String,
     pub name: String,
@@ -60,7 +52,6 @@ pub struct Step {
     /// none for calls that legitimately wait (questions, background launches, monitors).
     pub key: Option<String>,
 }
-
 impl Step {
     /// Waiting for its result, or a background task that has not reported back yet.
     pub fn running(&self) -> bool {
@@ -70,23 +61,19 @@ impl Step {
             (Some(_), None) => false,
         }
     }
-
     pub fn finished(&self) -> Option<i64> {
         match &self.bg {
             Some(bg) => bg.done,
             None => self.ended,
         }
     }
-
     pub fn failed(&self) -> bool {
         self.error || self.bg.as_ref().is_some_and(|b| matches!(b.status.as_str(), "failed" | "error"))
     }
-
     /// Stopped on purpose, or lost when the Claude Code process restarted.
     pub fn stopped(&self) -> bool {
         self.bg.as_ref().is_some_and(|b| matches!(b.status.as_str(), "killed" | "stopped" | "lost"))
     }
-
     /// Column label and text: MCP calls show their server, everything else its tool name.
     pub fn label(&self) -> (String, String) {
         if self.kind == Kind::Mcp {
@@ -97,7 +84,6 @@ impl Step {
         (self.name.clone(), self.summary.clone())
     }
 }
-
 // Nearly every item is a step, so boxing the large variant would add an allocation per step and
 // save nothing.
 #[allow(clippy::large_enum_variant)]
@@ -105,7 +91,6 @@ pub enum Item {
     Prompt { at: i64, text: String },
     Step(Step),
 }
-
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct Tokens {
     /// Fresh input plus cache writes: everything the model read without the cache's help.
@@ -119,7 +104,6 @@ pub struct Tokens {
     /// The part of the output spent thinking (its text is not in the transcript, only its size).
     pub thinking: u64,
 }
-
 impl Tokens {
     fn from_usage(u: &Value) -> Tokens {
         let n = |v: &Value| v.as_u64().unwrap_or(0);
@@ -134,7 +118,6 @@ impl Tokens {
             thinking: n(&u["output_tokens_details"]["thinking_tokens"]),
         }
     }
-
     pub fn plus(self, o: Tokens) -> Tokens {
         Tokens {
             input: self.input + o.input,
@@ -146,7 +129,6 @@ impl Tokens {
             thinking: self.thinking + o.thinking,
         }
     }
-
     fn minus(self, o: Tokens) -> Tokens {
         Tokens {
             input: self.input.saturating_sub(o.input),
@@ -159,7 +141,6 @@ impl Tokens {
         }
     }
 }
-
 /// What a session spends its time on, read from the gaps between transcript records: each
 /// thinking block is written when it ends, each text or tool call when it is complete, each tool
 /// result when the tool returns.
@@ -169,7 +150,6 @@ pub enum Phase {
     Write,
     Tool,
 }
-
 /// A context compaction, from the `compact_boundary` record Claude Code writes.
 pub struct Compaction {
     pub at: i64,
@@ -179,7 +159,6 @@ pub struct Compaction {
     /// The main agent's model at the time: the ceiling depends on its context window.
     pub model: String,
 }
-
 /// When the context will next be compacted, from how fast it grew over the last calls.
 pub struct Forecast {
     pub ctx: u64,
@@ -192,7 +171,6 @@ pub struct Forecast {
     pub calls: Option<f64>,
     pub secs: Option<f64>,
 }
-
 /// One file a session read or changed. Only counts and times are kept, never the content.
 #[derive(Default)]
 pub struct FileStat {
@@ -207,34 +185,29 @@ pub struct FileStat {
     /// The latest edits: which agent, when.
     pub editors: Vec<(usize, i64)>,
 }
-
 impl FileStat {
     pub fn last(&self) -> i64 {
         self.last_read.max(self.last_edit)
     }
 }
-
 /// Durations of finished calls of one kind, in doubling bins from half a second up.
 #[derive(Clone, Copy, Default)]
 pub struct Hist {
     pub n: u32,
     bins: [u32; 20],
 }
-
 impl Hist {
     fn add(&mut self, ms: i64) {
         let bin = ((ms.max(1) as f64 / 500.0).log2().floor().max(0.0) as usize).min(19);
         self.bins[bin] += 1;
         self.n += 1;
     }
-
     pub fn merge(&mut self, o: &Hist) {
         self.n += o.n;
         for (a, b) in self.bins.iter_mut().zip(o.bins) {
             *a += b;
         }
     }
-
     /// The upper edge of the bin holding the `q` quantile: rounds up, so "usual" is never
     /// underestimated and a slow call is flagged late rather than early.
     pub fn quantile(&self, q: f64) -> i64 {
@@ -249,10 +222,8 @@ impl Hist {
         500 << 20
     }
 }
-
 const FILES_KEPT: usize = 400;
 const CTX_SAMPLES: usize = 24;
-
 pub struct Agent {
     pub id: String,
     pub kind: String,
@@ -277,7 +248,6 @@ pub struct Agent {
     current: Tokens,
     current_msg: String,
 }
-
 impl Agent {
     fn new(id: &str, kind: &str, description: &str, parent_tool: Option<String>) -> Agent {
         Agent {
@@ -302,15 +272,12 @@ impl Agent {
             current_msg: String::new(),
         }
     }
-
     pub fn tokens(&self) -> Tokens {
         self.committed.plus(self.current)
     }
-
     pub fn step_count(&self) -> usize {
         self.items.iter().filter(|i| matches!(i, Item::Step(_))).count()
     }
-
     /// One API message is split over several records that repeat its usage: count it once.
     /// Returns what this record adds, and whether it starts a new message.
     fn add_usage(&mut self, msg_id: &str, u: &Value) -> (Tokens, bool) {
@@ -326,7 +293,6 @@ impl Agent {
         (t.minus(before), fresh_msg)
     }
 }
-
 pub struct WfAgent {
     pub agent_id: String,
     pub label: String,
@@ -336,7 +302,6 @@ pub struct WfAgent {
     pub last_tool: String,
     pub last_summary: String,
 }
-
 pub struct Workflow {
     pub name: String,
     pub run_id: String,
@@ -352,7 +317,6 @@ pub struct Workflow {
     pub expanded: Option<bool>,
     pub step: Option<String>,
 }
-
 impl Workflow {
     fn new(name: String, phases: Vec<String>, step: Option<String>) -> Workflow {
         Workflow {
@@ -369,28 +333,26 @@ impl Workflow {
             step,
         }
     }
-
     /// Phase index of a live agent, matched by its phase title.
     pub fn phase_of(&self, title: &str) -> Option<usize> {
         self.phases.iter().position(|p| p == title)
     }
 }
-
 #[derive(Default)]
 pub struct McpStat {
     pub calls: u32,
     pub errors: u32,
     pub last_tool: String,
 }
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Feed {
     Prompt,
     Start,
     Done,
     Failed,
+    /// A line the model itself said (main agent only): the agent narrating, not calling.
+    Answer,
 }
-
 pub struct FeedItem {
     pub at: i64,
     pub feed: Feed,
@@ -399,18 +361,15 @@ pub struct FeedItem {
     pub text: String,
     pub tool: Option<String>,
 }
-
 /// Amounts (events, tokens, bytes) in 5-second buckets, for sparklines and rates.
 pub struct Activity {
     buckets: [u32; BUCKETS],
     head: i64,
 }
-
 impl Activity {
     fn new() -> Activity {
         Activity { buckets: [0; BUCKETS], head: 0 }
     }
-
     fn add(&mut self, at: i64, n: u64) {
         let b = at.div_euclid(BUCKET_MS);
         if b > self.head {
@@ -425,7 +384,6 @@ impl Activity {
             self.buckets[i] = self.buckets[i].saturating_add(n.min(u32::MAX as u64) as u32);
         }
     }
-
     /// The last `n` buckets ending at `now`, oldest first.
     pub fn series(&self, now: i64, n: usize) -> Vec<u32> {
         let nb = now.div_euclid(BUCKET_MS);
@@ -437,17 +395,19 @@ impl Activity {
             })
             .collect()
     }
-
     /// Total over the last minute.
     pub fn per_min(&self, now: i64) -> u64 {
         self.sum(now, (60_000 / BUCKET_MS) as usize)
     }
-
+    /// Rate per second, averaged over the last three buckets (15 s): the unit LLM people read
+    /// tokens in, smoothed so a five-second gap does not read as zero.
+    pub fn per_sec(&self, now: i64) -> u64 {
+        self.sum(now, 3) / (3 * BUCKET_MS as u64 / 1_000)
+    }
     /// Total over the last `n` buckets.
     pub fn sum(&self, now: i64, n: usize) -> u64 {
         self.series(now, n).iter().map(|&v| v as u64).sum()
     }
-
     /// Spreads a duration in milliseconds over the buckets it covers.
     fn add_span(&mut self, start: i64, end: i64) {
         let mut t = start.max(end - BUCKETS as i64 * BUCKET_MS);
@@ -458,7 +418,6 @@ impl Activity {
         }
     }
 }
-
 pub struct Session {
     pub id: String,
     /// The Claude Code process, from the registry (0 when unknown).
@@ -468,7 +427,6 @@ pub struct Session {
     pub status: String,
     pub alive: bool,
     pub title: String,
-    pub dir: PathBuf,
     pub agents: Vec<Agent>,
     pub workflows: Vec<Workflow>,
     pub mcp: BTreeMap<String, McpStat>,
@@ -515,9 +473,8 @@ pub struct Session {
     /// Workflow agents seen before the call that launched their run (keyed by run id).
     pending_wf: HashMap<String, Vec<usize>>,
 }
-
 impl Session {
-    pub fn new(id: &str, dir: PathBuf) -> Session {
+    pub fn new(id: &str) -> Session {
         Session {
             id: id.to_string(),
             pid: 0,
@@ -526,7 +483,6 @@ impl Session {
             status: String::new(),
             alive: false,
             title: String::new(),
-            dir,
             agents: vec![Agent::new("main", "main", "", None)],
             workflows: Vec::new(),
             mcp: BTreeMap::new(),
@@ -559,20 +515,13 @@ impl Session {
             pending_wf: HashMap::new(),
         }
     }
-
     /// Project folder name, the most recognizable label for a session.
     pub fn project(&self) -> &str {
         self.cwd.rsplit(['/', '\\']).find(|s| !s.is_empty()).unwrap_or(&self.name)
     }
-
-    pub fn has_agent(&self, id: &str) -> bool {
-        self.agent_ids.contains_key(id)
-    }
-
     pub fn agent_index(&self, id: &str) -> Option<usize> {
         self.agent_ids.get(id).copied()
     }
-
     /// Registers a subagent and hangs it under the step that spawned it, now or once seen.
     pub fn add_agent(&mut self, id: &str, kind: &str, description: &str, parent_tool: Option<String>) -> usize {
         if let Some(&a) = self.agent_ids.get(id) {
@@ -595,7 +544,6 @@ impl Session {
         }
         a
     }
-
     /// Registers an agent of a workflow run, followed from `subagents/workflows/<run>/`, and
     /// hangs it under its run now or once the call that launched the run is read.
     pub fn add_wf_agent(&mut self, run: &str, id: &str, label: &str, phase: &str) -> usize {
@@ -611,7 +559,6 @@ impl Session {
         }
         a
     }
-
     fn link_run(&mut self, w: usize, run: &str) {
         if run.is_empty() {
             return;
@@ -621,7 +568,6 @@ impl Session {
             self.workflows[w].live.extend(agents);
         }
     }
-
     pub fn ingest(&mut self, a: usize, line: &str) {
         let Ok(v) = serde_json::from_str::<Value>(line) else { return };
         if a == 0 && v.get("isSidechain").and_then(Value::as_bool) == Some(true) {
@@ -679,7 +625,6 @@ impl Session {
             _ => {}
         }
     }
-
     /// Counts the time since the agent's last record as spent in `phase`, at most `cap`.
     fn span(&mut self, a: usize, phase: Phase, at: i64, cap: i64) {
         let ag = &mut self.agents[a];
@@ -688,7 +633,6 @@ impl Session {
         }
         ag.mark = ag.mark.max(at);
     }
-
     fn on_assistant(&mut self, a: usize, msg: &Value, at: i64) {
         let ag = &mut self.agents[a];
         if let Some(m) = msg.get("model").and_then(Value::as_str)
@@ -710,6 +654,14 @@ impl Session {
         if let Some(p) = phase {
             self.span(a, p, at, 10 * 60_000);
         }
+        if first == "text" && a == 0 {
+            // The agent speaking, not calling: one line in the feed (the body stays out).
+            let said = msg["content"][0].get("text").and_then(Value::as_str).unwrap_or("");
+            let line = parse::clip(parse::first_line(said), 300);
+            if !line.is_empty() {
+                self.push_feed(FeedItem { at, feed: Feed::Answer, kind: None, label: String::new(), text: line, tool: None });
+            }
+        }
         if let (Some(id), Some(u)) = (msg.get("id").and_then(Value::as_str), msg.get("usage")) {
             let (d, new_call) = self.agents[a].add_usage(id, u);
             self.tok_up.add(at, d.input + d.cache_read);
@@ -725,7 +677,8 @@ impl Session {
                 self.flares.push_back((at, d.cache_write));
             }
             let fast = u.get("speed").and_then(Value::as_str) == Some("fast");
-            match price::cost_micros(&self.agents[a].model, &d, fast) {
+            // Models with no list price (a local one): the client may carry the price of the call.
+            match price::cost_micros(&self.agents[a].model, &d, fast).or_else(|| u.get("ccorbit_cost_micros").and_then(Value::as_u64)) {
                 Some(c) => {
                     self.cost_micros += c;
                     self.cost.add(at, c);
@@ -753,7 +706,6 @@ impl Session {
             }
         }
     }
-
     fn start_step(&mut self, a: usize, b: &Value, at: i64) {
         let Some(id) = b.get("id").and_then(Value::as_str) else { return };
         if self.index.contains_key(id) {
@@ -809,7 +761,6 @@ impl Session {
         items.push(Item::Step(step));
         self.trim(a);
     }
-
     fn on_user(&mut self, a: usize, v: &Value, at: i64) {
         let meta = v.get("isMeta").and_then(Value::as_bool).unwrap_or(false);
         let content = &v["message"]["content"];
@@ -844,7 +795,6 @@ impl Session {
             }
         }
     }
-
     fn on_user_text(&mut self, a: usize, text: &str, at: i64, meta: bool) {
         let t = text.trim();
         if t.contains("<task-notification>") {
@@ -870,13 +820,11 @@ impl Session {
             self.agents[a].prompt = parse::clip(parse::first_line(t), 300);
         }
     }
-
     fn push_prompt(&mut self, text: String, at: i64) {
         self.push_feed(FeedItem { at, feed: Feed::Prompt, kind: None, label: String::new(), text: text.clone(), tool: None });
         self.agents[0].items.push(Item::Prompt { at, text });
         self.trim(0);
     }
-
     fn end_step(&mut self, id: &str, error: bool, text: &str, tur: &Value, at: i64) {
         let Some(&(a, i)) = self.index.get(id) else { return };
         let Some(Item::Step(st)) = self.agents[a].items.get_mut(i) else { return };
@@ -941,7 +889,6 @@ impl Session {
             self.close_task(&target, None, at, "stopped");
         }
     }
-
     /// Marks a background task finished, by tool id or task id; remembers it if not seen yet.
     fn close_task(&mut self, task: &str, tool: Option<&str>, at: i64, status: &str) -> bool {
         let tool = tool.map(str::to_string).or_else(|| self.tasks.get(task).cloned());
@@ -964,7 +911,6 @@ impl Session {
         }
         true
     }
-
     fn on_notifications(&mut self, text: &str, at: i64) {
         for chunk in text.split("<task-notification>").skip(1) {
             let task = parse::tag(chunk, "task-id").unwrap_or("").to_string();
@@ -979,7 +925,6 @@ impl Session {
             self.push_feed(FeedItem { at, feed: if failed { Feed::Failed } else { Feed::Done }, kind: Some(kind), label, text: summary, tool: Some(id) });
         }
     }
-
     /// A `workflows/wf_*.json` run record. Claude Code writes it when the run ends.
     pub fn on_workflow_json(&mut self, v: &Value) {
         let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
@@ -1057,7 +1002,6 @@ impl Session {
             }
         }
     }
-
     /// Records a read or a change of a file. From an edit's result only the counts of added and
     /// removed lines are kept; file contents and edited text are never stored.
     fn touch(&mut self, path: &str, tool: &str, a: usize, tur: &Value, at: i64) {
@@ -1097,14 +1041,12 @@ impl Session {
             f.editors.remove(0);
         }
     }
-
     fn note_skill(&mut self, name: &str) {
         match self.skills.iter_mut().find(|(n, _)| n == name) {
             Some(e) => e.1 += 1,
             None => self.skills.push((name.to_string(), 1)),
         }
     }
-
     fn push_feed(&mut self, item: FeedItem) {
         self.activity.add(item.at, 1);
         if self.feed.len() == FEED_LEN {
@@ -1112,7 +1054,54 @@ impl Session {
         }
         self.feed.push_back(item);
     }
-
+    /// opencode fills a tool's input a moment after creating its row: re-derive what the input
+    /// decides (summary, kind, path, keys) for a step still waiting for its result.
+    pub fn set_step_input(&mut self, id: &str, input: &Value) {
+        let Some(&(a, i)) = self.index.get(id) else { return };
+        let Some(Item::Step(st)) = self.agents[a].items.get_mut(i) else { return };
+        if st.ended.is_some() {
+            return;
+        }
+        st.summary = parse::summarize(&st.name, input);
+        st.path = matches!(st.name.as_str(), "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit")
+            .then(|| input.get("file_path").or(input.get("notebook_path")).and_then(Value::as_str).map(str::to_string))
+            .flatten();
+        st.target = matches!(st.name.as_str(), "TaskStop" | "KillShell")
+            .then(|| input.get("task_id").or(input.get("shell_id")).and_then(Value::as_str).map(str::to_string))
+            .flatten();
+        st.sig = parse::signature(&st.name, input);
+        st.key = parse::duration_key(&st.name, input);
+        let (kind, label, text) = (st.kind, st.label().0, st.label().1);
+        let skill = if kind == Kind::Skill { input.get("skill").and_then(Value::as_str).map(str::to_string) } else { None };
+        if let Some(fe) = self.feed.iter_mut().rev().find(|fe| fe.tool.as_deref() == Some(id) && fe.feed == Feed::Start) {
+            fe.label = label;
+            fe.text = text;
+        }
+        if let Some(k) = skill
+            && !self.skills.iter().any(|(n, _)| n == &k)
+        {
+            self.note_skill(&k);
+        }
+    }
+    /// The process behind the session is gone: no call will ever end, no turn complete. Close
+    /// what is still open (as lost) so the card reads idle instead of shimmering forever —
+    /// except a question: that waits on the person, whoever is left to answer it.
+    pub fn abandon_running(&mut self, at: i64) {
+        for ag in &mut self.agents {
+            for item in &mut ag.items {
+                let Item::Step(st) = item else { continue };
+                if st.ended.is_none() && !matches!(st.name.as_str(), "AskUserQuestion" | "ExitPlanMode") {
+                    st.ended = Some(at.max(st.started));
+                }
+                if let Some(bg) = &mut st.bg
+                    && bg.done.is_none()
+                {
+                    bg.done = Some(at.max(st.started));
+                    bg.status = "lost".into();
+                }
+            }
+        }
+    }
     fn trim(&mut self, a: usize) {
         if self.agents[a].items.len() <= MAX_ITEMS {
             return;
@@ -1125,7 +1114,6 @@ impl Session {
             }
         }
     }
-
     pub fn step_by_tool(&self, tool: &str) -> Option<&Step> {
         let &(a, i) = self.index.get(tool)?;
         match self.agents[a].items.get(i)? {
@@ -1133,7 +1121,6 @@ impl Session {
             Item::Prompt { .. } => None,
         }
     }
-
     pub fn steps(&self) -> impl Iterator<Item = (usize, &Step)> {
         self.agents.iter().enumerate().flat_map(|(a, ag)| {
             ag.items.iter().filter_map(move |i| match i {
@@ -1142,7 +1129,6 @@ impl Session {
             })
         })
     }
-
     pub fn agent_running(&self, a: usize) -> bool {
         if !self.alive {
             return false;
@@ -1167,30 +1153,25 @@ impl Session {
             None => false,
         }
     }
-
     pub fn running_agents(&self) -> usize {
         (1..self.agents.len()).filter(|&a| self.agent_running(a)).count()
     }
-
     pub fn background_running(&self) -> usize {
         if !self.alive {
             return 0;
         }
         self.steps().filter(|(_, s)| s.ended.is_some() && s.running()).count()
     }
-
     /// Working: a busy main loop, a step waiting for its result, or a background agent or
     /// workflow. Background shell commands (dev servers, watchers) alone do not count.
     pub fn busy(&self) -> bool {
         self.alive && (self.status == "busy" || self.steps().any(|(_, s)| s.ended.is_none() || (s.running() && s.kind != Kind::Shell)))
     }
-
     /// Waiting on the person: a question or a plan to approve is open.
     pub fn needs_you(&self) -> bool {
         self.alive
             && (self.status.contains("wait") || self.steps().any(|(_, s)| s.ended.is_none() && matches!(s.name.as_str(), "AskUserQuestion" | "ExitPlanMode")))
     }
-
     /// Registry name suffix (`projects-63` -> `63`), to tell apart sessions in the same folder.
     pub fn short_tag(&self) -> &str {
         match self.name.rsplit_once('-') {
@@ -1198,7 +1179,6 @@ impl Session {
             _ => &self.id[..self.id.len().min(4)],
         }
     }
-
     /// The most recent step still waiting for its result, preferring the deepest agent.
     pub fn current(&self) -> Option<(usize, &Step)> {
         if !self.alive {
@@ -1206,7 +1186,6 @@ impl Session {
         }
         self.steps().filter(|(_, s)| s.ended.is_none()).max_by_key(|(_, s)| s.started)
     }
-
     pub fn last_step(&self) -> Option<(usize, &Step)> {
         self.agents
             .iter()
@@ -1219,18 +1198,15 @@ impl Session {
             })
             .max_by_key(|(_, s)| s.started)
     }
-
     pub fn last_prompt(&self) -> Option<&str> {
         self.agents[0].items.iter().rev().find_map(|i| match i {
             Item::Prompt { text, .. } => Some(text.as_str()),
             Item::Step(_) => None,
         })
     }
-
     pub fn tokens(&self) -> Tokens {
         self.agents.iter().fold(Tokens::default(), |t, a| t.plus(a.tokens()))
     }
-
     /// Where the context stands against the compaction ceiling (see `insight::ceiling`), and
     /// how many calls are left at the pace of the last ones. Claude Code may compact earlier.
     pub fn forecast(&self, ceiling: Option<u64>) -> Forecast {
@@ -1255,7 +1231,6 @@ impl Session {
         }
         Forecast { ctx, limit, known, per_call, calls, secs }
     }
-
     /// What the session does right now: waiting for a tool (since when), or producing an answer
     /// whose kind (thinking or writing) is only known once its record is written.
     pub fn phase_now(&self) -> Option<(Option<Phase>, i64)> {
@@ -1267,7 +1242,6 @@ impl Session {
         }
         (self.status == "busy").then(|| (None, self.agents[0].mark))
     }
-
     /// The three phase traces over the last `n` buckets, with the intervals still open added
     /// live: tool time for agents waiting on a tool, and a fourth trace for answers in progress.
     pub fn waves_live(&self, now: i64, n: usize) -> ([Vec<u64>; 3], Vec<u64>) {
@@ -1301,34 +1275,28 @@ impl Session {
         }
         (out, pending)
     }
-
     /// Hit ratio of the prompt cache over the last `n` buckets.
     pub fn cache_ratio(&self, now: i64, n: usize) -> Option<f64> {
         let (f, w, r) = (self.fresh_in.sum(now, n), self.cache_w.sum(now, n), self.cache_r.sum(now, n));
         (f + w + r > 0).then(|| r as f64 / (f + w + r) as f64)
     }
-
     pub fn mcp_running(&self) -> HashSet<String> {
         if !self.alive {
             return HashSet::new();
         }
         self.steps().filter(|(_, s)| s.kind == Kind::Mcp && s.ended.is_none()).map(|(_, s)| parse::mcp_parts(&s.name).0.to_string()).collect()
     }
-
     pub fn collapsed(&self, a: usize) -> bool {
         self.agents[a].collapsed.unwrap_or(a != 0 && !self.agent_running(a))
     }
-
     pub fn phase_open(&self, w: usize, p: usize) -> bool {
         let wf = &self.workflows[w];
         wf.open.get(p).copied().flatten().unwrap_or_else(|| wf.live.iter().any(|&a| wf.phase_of(&self.agents[a].wf_phase) == Some(p) && self.agent_running(a)))
     }
-
     pub fn wf_expanded(&self, w: usize) -> bool {
         let wf = &self.workflows[w];
         wf.expanded.unwrap_or_else(|| wf.step.as_deref().and_then(|t| self.step_by_tool(t)).is_some_and(|s| s.running() && self.alive))
     }
-
     pub fn set_all_expanded(&mut self, open: bool) {
         for (a, ag) in self.agents.iter_mut().enumerate() {
             ag.collapsed = Some(if a == 0 { false } else { !open });
@@ -1339,7 +1307,6 @@ impl Session {
         }
     }
 }
-
 /// A finished workflow run, from its `wf_*.json` record: what a running one is raced against.
 pub struct PastRun {
     pub run_id: String,
@@ -1351,7 +1318,6 @@ pub struct PastRun {
     /// Each phase's start and end, as offsets from the run's start.
     pub spans: Vec<Option<(i64, i64)>>,
 }
-
 impl PastRun {
     pub fn from_json(v: &Value) -> Option<PastRun> {
         let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
@@ -1380,18 +1346,15 @@ impl PastRun {
         Some(PastRun { run_id: s("runId"), name: s("workflowName"), phases, start, dur, status: s("status"), spans })
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
     fn line(v: serde_json::Value) -> String {
         v.to_string()
     }
-
     #[test]
     fn tracks_steps_agents_and_background_tasks() {
-        let mut s = Session::new("s", PathBuf::from("/nowhere"));
+        let mut s = Session::new("s");
         s.alive = true;
         let t = "2026-10-16T10:00:00.000Z";
         s.ingest(0, &line(serde_json::json!({"type":"user","timestamp":t,"message":{"content":"hello there"}})));
@@ -1406,29 +1369,24 @@ mod tests {
             &line(serde_json::json!({"type":"assistant","timestamp":t,"message":{"id":"m1","usage":{"input_tokens":10,"output_tokens":7},"content":[]}})),
         );
         assert_eq!(s.agents[0].tokens().output, 7);
-
         let a = s.add_agent("ag1", "Explore", "Audit", Some("t2".into()));
         assert_eq!(s.step_by_tool("t2").unwrap().child, Some(a));
         assert!(s.agent_running(a));
-
         s.ingest(0, &line(serde_json::json!({"type":"user","timestamp":"2026-10-16T10:00:02.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"a\nb"}]}})));
         s.ingest(0, &line(serde_json::json!({"type":"user","timestamp":"2026-10-16T10:00:02.000Z","toolUseResult":{"isAsync":true,"agentId":"ag1"},"message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"launched"}]}})));
         let t1 = s.step_by_tool("t1").unwrap();
         assert!(!t1.running());
         assert_eq!(t1.finished().unwrap() - t1.started, 2000);
         assert!(s.step_by_tool("t2").unwrap().running(), "async agent still running in background");
-
         s.ingest(0, &line(serde_json::json!({"type":"queue-operation","timestamp":"2026-10-16T10:01:00.000Z","content":"<task-notification>\n<task-id>ag1</task-id>\n<tool-use-id>t2</tool-use-id>\n<status>completed</status>\n</task-notification>"})));
         assert!(!s.step_by_tool("t2").unwrap().running());
         assert!(!s.agent_running(a));
         assert_eq!(s.mcp["claude_ai_Notion"].calls, 1);
         assert_eq!(s.last_prompt(), Some("hello there"));
     }
-
     fn ts(sec: i64) -> String {
         format!("2026-10-16T10:{:02}:{:02}.000Z", sec / 60, sec % 60)
     }
-
     fn call(s: &mut Session, a: usize, sec: i64, id: &str, first: &str, usage: serde_json::Value, tools: &[(&str, &str, serde_json::Value)]) {
         let mut content = vec![serde_json::json!({"type": first, "text": "x", "thinking": ""})];
         if first == "tool_use" {
@@ -1442,18 +1400,15 @@ mod tests {
             &line(serde_json::json!({"type":"assistant","timestamp":ts(sec),"message":{"id":id,"model":"claude-sonnet-4-5","usage":usage,"content":content}})),
         );
     }
-
     fn result(s: &mut Session, a: usize, sec: i64, tid: &str, tur: serde_json::Value) {
         result_text(s, a, sec, tid, tur, "ok");
     }
-
     fn result_text(s: &mut Session, a: usize, sec: i64, tid: &str, tur: serde_json::Value, text: &str) {
         s.ingest(a, &line(serde_json::json!({"type":"user","timestamp":ts(sec),"toolUseResult":tur,"message":{"content":[{"type":"tool_result","tool_use_id":tid,"content":text}]}})));
     }
-
     #[test]
     fn reads_phases_cache_files_and_compactions() {
-        let mut s = Session::new("s", PathBuf::from("/nowhere"));
+        let mut s = Session::new("s");
         s.alive = true;
         s.ingest(0, &line(serde_json::json!({"type":"user","timestamp":ts(0),"message":{"content":"go"}})));
         // 20 s thinking, then 5 s writing the tool call, then a 10 s tool.
@@ -1472,7 +1427,6 @@ mod tests {
         assert_eq!((f.edits, f.added, f.removed), (1, 2, 1));
         // 5 fresh at 3 + 30k 1h writes at 6 + 1k reads at 0.3 + 50 out at 15, per million.
         assert_eq!(s.cost_micros, (5.0f64 * 3.0 + 30_000.0 * 6.0 + 1_000.0 * 0.3 + 50.0 * 15.0).round() as u64);
-
         s.ingest(
             0,
             &line(serde_json::json!({"type":"system","subtype":"compact_boundary","timestamp":ts(50),"compactMetadata":{"trigger":"auto","preTokens":180000}})),
@@ -1488,10 +1442,9 @@ mod tests {
         assert_eq!(fc.calls, Some(5.0));
         assert_eq!(fc.secs, Some(50.0));
     }
-
     #[test]
     fn follows_workflow_agents_live_and_links_them_to_their_run() {
-        let mut s = Session::new("s", PathBuf::from("/nowhere"));
+        let mut s = Session::new("s");
         s.alive = true;
         // The run's agent shows up before the launching call is read.
         let a = s.add_wf_agent("wf_1", "ag1", "build:x", "Build");
@@ -1511,7 +1464,6 @@ mod tests {
         result(&mut s, a, 4, "so", serde_json::json!({}));
         assert!(!s.agent_running(a), "a structured answer ends a workflow agent");
     }
-
     #[test]
     fn reads_past_runs_with_phase_spans() {
         let v = serde_json::json!({"runId":"wf_9","workflowName":"demo","status":"completed","startTime":1000,"durationMs":9000,"totalTokens":5,
@@ -1520,5 +1472,37 @@ mod tests {
             {"type":"workflow_agent","phaseIndex":2,"startedAt":4500,"durationMs":1000}]});
         let r = PastRun::from_json(&v).unwrap();
         assert_eq!(r.spans, vec![Some((0, 3000)), Some((3000, 8000))]);
+    }
+    #[test]
+    fn a_tools_input_can_arrive_after_its_row() {
+        let mut s = Session::new("s");
+        s.alive = true;
+        call(&mut s, 0, 10, "m1", "tool_use", serde_json::json!({"input_tokens":5,"output_tokens":1}), &[("b1", "Bash", serde_json::json!({}))]);
+        assert!(s.step_by_tool("b1").unwrap().summary.is_empty(), "the row was seen before the command landed");
+        s.set_step_input("b1", &serde_json::json!({"command": "cargo build --release", "description": "build the fork"}));
+        assert_eq!(s.step_by_tool("b1").unwrap().summary, "build the fork");
+        result(&mut s, 0, 12, "b1", serde_json::json!({}));
+        s.set_step_input("b1", &serde_json::json!({"command": "late"}));
+        assert_eq!(s.step_by_tool("b1").unwrap().summary, "build the fork", "a closed step is not reopened");
+    }
+
+    #[test]
+    fn dead_sessions_close_open_calls_but_keep_the_question() {
+        let mut s = Session::new("s");
+        s.alive = true;
+        call(
+            &mut s,
+            0,
+            10,
+            "m1",
+            "tool_use",
+            serde_json::json!({"input_tokens":1,"output_tokens":1}),
+            &[("b1", "Bash", serde_json::json!({"command":"ls"})), ("q1", "AskUserQuestion", serde_json::json!({"questions":[]}))],
+        );
+        assert!(s.busy());
+        s.abandon_running(90_000);
+        assert!(s.step_by_tool("b1").unwrap().ended.is_some(), "a call whose process died is closed");
+        assert_eq!(s.step_by_tool("q1").unwrap().ended, None, "a question waits on the person, not on a process");
+        assert!(s.needs_you() && s.busy(), "the open question still asks for an answer");
     }
 }

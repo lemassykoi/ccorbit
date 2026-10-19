@@ -1,14 +1,15 @@
-//! ccorbit: a retro, read-only live view of every Claude Code session on this machine.
+//! ccorbit: a retro, read-only live view of every opencode session on this machine.
 
 mod demo;
+mod engines;
 mod hud;
 mod insight;
 mod jump;
 mod model;
+mod opencode;
 mod parse;
 mod price;
 mod source;
-mod tail;
 mod theme;
 mod time;
 mod ui;
@@ -20,7 +21,7 @@ use ratatui::crossterm::execute;
 use std::process::ExitCode;
 
 const HELP: &str = "\
-ccorbit: live view of every Claude Code session on this machine
+ccorbit: live view of every opencode session on this machine
 
 USAGE:
     ccorbit [OPTIONS]
@@ -29,8 +30,9 @@ OPTIONS:
     --replay <FILE>      Play back a transcript (.jsonl) instead of watching live sessions
     --speed <N>          Replay speed multiplier (default 20)
     --theme <NAME>       phosphor (default), amber or neon
-    --claude-dir <DIR>   Claude Code data directory (default: $CLAUDE_CONFIG_DIR, or .claude in
-                         your home folder)
+    --opencode-db <DIR>  opencode storage database (default: $XDG_DATA_HOME/opencode/opencode.db,
+                         or opencode.db in your data folder)
+    --engines <FILE>     JSON file listing local LLM engines to show a pulse of (see README)
     --hud                Start on the HUD (the live graph) instead of the wall
     --director           Start on the HUD with the director at the camera
     --demo               Show made-up sessions instead of yours (to try it, or record it)
@@ -41,12 +43,14 @@ OPTIONS:
     -h, --help           Show this help
     -V, --version        Show the version
 
-ccorbit only reads files: it never writes, never runs a command and never opens a network
-connection. The one exception is --allow-jump, which runs `open` when you press `o`.
+ccorbit only reads: it never writes and never runs a command (except --allow-jump, which runs
+`open` when you press `o`). It opens a short read-only connection per engine, only when
+--engines lists the addresses, and only the http endpoints named there.
 ";
 
 pub struct Opts {
-    pub claude_dir: PathBuf,
+    pub db_path: PathBuf,
+    pub engines: Option<PathBuf>,
     pub replay: Option<PathBuf>,
     pub speed: f64,
     pub theme: usize,
@@ -63,9 +67,10 @@ pub struct Opts {
 
 impl Opts {
     /// The defaults, before any option is read.
-    pub fn new(claude_dir: PathBuf) -> Opts {
+    pub fn new(db_path: PathBuf) -> Opts {
         Opts {
-            claude_dir,
+            db_path,
+            engines: None,
             replay: None,
             speed: 20.0,
             theme: 0,
@@ -83,14 +88,7 @@ impl Opts {
 }
 
 fn parse_args() -> Result<Opts, String> {
-    let claude_dir = match std::env::var_os("CLAUDE_CONFIG_DIR") {
-        Some(d) => PathBuf::from(d),
-        // `HOME` on macOS and Linux, `USERPROFILE` on Windows.
-        None => {
-            PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).ok_or("neither HOME nor USERPROFILE is set")?).join(".claude")
-        }
-    };
-    let mut o = Opts::new(claude_dir);
+    let mut o = Opts::new(opencode::default_db());
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -108,7 +106,8 @@ fn parse_args() -> Result<Opts, String> {
                 let name = args.next().ok_or("--theme needs a name")?;
                 o.theme = theme::index(&name).ok_or_else(|| format!("unknown theme: {name}"))?;
             }
-            "--claude-dir" => o.claude_dir = args.next().ok_or("--claude-dir needs a path")?.into(),
+            "--opencode-db" => o.db_path = args.next().ok_or("--opencode-db needs a path")?.into(),
+            "--engines" => o.engines = Some(args.next().ok_or("--engines needs a path")?.into()),
             "--no-boot" => o.boot = false,
             "--hud" => o.hud = true,
             "--director" => o.director = true,
@@ -156,7 +155,7 @@ fn main() -> ExitCode {
             }
         },
         None if opts.demo => source::World::demo(),
-        None => source::World::live(opts.claude_dir.clone()),
+        None => source::World::opencode(opts.db_path.clone()),
     };
     if let Some((w, h, dir)) = &opts.snapshot_html {
         world.run_to_end();
@@ -197,7 +196,7 @@ fn main() -> ExitCode {
     }
     if opts.dump {
         world.run_to_end();
-        print!("{}", ui::dump(&mut world));
+        print!("{}", ui::dump(&mut world, &opts));
         return ExitCode::SUCCESS;
     }
     let mut terminal = ratatui::init();

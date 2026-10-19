@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **The live source is opencode** (fork): sessions, prompts, steps, subagents, skills, MCP
+  servers, tokens, compactions and the code city are read from opencode's storage database,
+  opened read-only (`$XDG_DATA_HOME/opencode/opencode.db`, or `--opencode-db`). The Claude Code
+  reader is gone; `--replay` and `--demo` keep the record grammar. `rusqlite` (bundled) joins the
+  two dependencies; the size budget moved to 3.8 MB.
+- **The engine pulse** (`--engines <FILE>`): one read-only footer strip per listed local LLM
+  engine — prefix-cache hit share, KV fill, running and waiting requests, decode tokens per
+  second, mean time-to-first-token — from a vLLM Prometheus endpoint or a llama.cpp-style
+  `/status`. Off unless asked for, `http://` only; the only network the tool may touch
+  (`docs/DECISIONS.md`).
+- **Liveness for a source without process identity**: a session is busy while its rows move (or a
+  tool-free turn is open and recent), not while history says so. Tool rows created empty refresh
+  their step when the input lands (new lines no longer sit blank); calls left `running` by a dead
+  process close as lost; a session quiet for an hour leaves the wall and returns on activity; a
+  question waiting on the person is never abandoned.
+- **Price falls back to what opencode bills per step** when `price.rs` has no list (every local
+  model); with neither, tokens stay unpriced as before.
 - **A harness for working on ccorbit with coding agents:** `AGENTS.md` (the map) and `docs/`
   (architecture, promises and their checks, transcript format, decisions, visual QA);
   `scripts/verify.sh` runs formatting, clippy, every test and the footprint budgets, in CI too;

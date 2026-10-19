@@ -98,15 +98,26 @@ fn the_program_never_opens_a_network_connection() {
     let found = offenders(&["std::net", "TcpStream", "TcpListener", "UdpSocket", "reqwest", "ureq", "hyper::"], "harness: allow network", |_| true);
     assert!(
         found.is_empty(),
-        "ccorbit never opens a network connection (docs/INVARIANTS.md). These lines do:\n{}\n\n\
-         Fix: everything ccorbit shows comes from files under ~/.claude; find the information there.",
+        "ccorbit never opens a network connection (docs/INVARIANTS.md), except the read-only engine pulse, which only the `harness: allow network` lines in src/engines.rs may do. These lines do:\n{}\n\n\
+         Fix: everything ccorbit shows comes from reading files (opencode's storage database); take the information from there.",
         found.join("\n")
     );
 }
 
 #[test]
 fn the_data_layer_knows_nothing_of_the_screen() {
-    let data = ["src/model.rs", "src/parse.rs", "src/tail.rs", "src/time.rs", "src/price.rs", "src/insight.rs", "src/source.rs", "src/demo.rs", "src/jump.rs"];
+    let data = [
+        "src/model.rs",
+        "src/parse.rs",
+        "src/time.rs",
+        "src/price.rs",
+        "src/insight.rs",
+        "src/source.rs",
+        "src/demo.rs",
+        "src/jump.rs",
+        "src/opencode.rs",
+        "src/engines.rs",
+    ];
     let found = offenders(&["ratatui", "crate::ui", "crate::hud", "crossterm"], "harness: allow ui", |f| data.contains(&f));
     assert!(
         found.is_empty(),
@@ -129,11 +140,11 @@ fn dependencies_stay_few() {
         .take_while(|l| !l.starts_with('['))
         .filter_map(|l| l.split('=').next().map(str::trim).filter(|k| !k.is_empty() && !k.starts_with('#')))
         .collect();
-    let allowed = ["ratatui", "serde_json"];
+    let allowed = ["ratatui", "serde_json", "rusqlite"];
     let extra: Vec<&&str> = deps.iter().filter(|d| !allowed.contains(d)).collect();
     assert!(
         extra.is_empty(),
-        "ccorbit runs on two dependencies, to stay about 1 MB and quick to build; new ones: {extra:?}.\n\
+        "ccorbit runs on few dependencies, to stay small and quick to build; new ones: {extra:?}.\n\
          Fix: do without it, or record why it is worth it in docs/DECISIONS.md and add it to the list in this test."
     );
 }

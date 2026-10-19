@@ -3,17 +3,19 @@ name = "ccorbit"
 version = "0.2.0"
 edition = "2024"
 authors = ["Pierre CANGEMI"]
-description = "A live, read-only terminal view of every Claude Code session on this machine: wall, 3D HUD, code city"
+description = "A live, read-only terminal view of every opencode session on this machine: wall, 3D HUD, code city"
 repository = "https://github.com/pcangemi/ccorbit"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-keywords = ["claude", "claude-code", "tui", "monitoring", "terminal"]
+keywords = ["opencode", "tui", "monitoring", "terminal", "local-llm"]
 categories = ["command-line-utilities", "development-tools"]
 exclude = ["docs/", ".github/", "dist-workspace.toml"]
 
 [dependencies]
 ratatui = { version = "0.29", default-features = false, features = ["crossterm"] }
 serde_json = "1"
+# The live source reads opencode's SQLite storage; bundled keeps it a single static binary.
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [profile.release]
 opt-level = 3

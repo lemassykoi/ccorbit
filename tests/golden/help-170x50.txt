@@ -1,10 +1,10 @@
-▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 12M/m ⇣ 31k/m ≈$343/h                 activity ▄▄▄·▅▅▇▇█·▅▇▇▇▇▅▄▅▇▅▂▅▄·
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$343/h                activity ▄▄▅▂▅▇▇▇█▂▇▇▇█▇▇▄▅▇▅▄▇▄·
 ╔ ⠦ webapp·12 ═════════════════════════════════ BUSY  ╗ ╭ ⠦ webapp·47 ───────────────────────────────── BUSY  ╮ ╭ ● api ─────────────────────────────────────── IDLE  ╮
 ║Checkout redesign                                    ║▌│Server-side rendering                                │▌│Rate limiter per tenant                              │▌
 ║⠦ model      thinking or writing the next step   1.3s║▌│⠦ model      thinking or writing the next step   2.1s│▌│✓ Read …/api/main.go                          13s ago│▌
 ║✖ checkout.tsx  △ on pace · ETA 3m29s  ◆ 3 running of║▌│✖ checkout.tsx  ◆ 1 agent  ⇄ github, linear          │▌│◆ 2 agents  ✦ 1 skill  ⇄ github, linear              │▌
-║⇡ 3.2M/m ⇣  16k/m ·▸····▸····▸····▸····▸·· ██░░░░ 36%║▌│⇡ 2.9M/m ⇣ 3.7k/m ·▸····▸····▸····▸····▸·· ███░░░ 50%│▌│⇡ 4.7M/m ⇣ 8.0k/m ·▸····▸····▸····▸····▸·· ██████ 96%│▌
-║⠤⠞⠳⠤⠴⠛⢦⡴⠋⢳⣠⠖⠲⣄⡖⠛⢦⡴⠒⢦⣠⠞⠳⣤⠞⠓⣆⡴⠛⠦⠤ ◉ 96% ≈$9.55 opus-5-5║▌│⣤⠞⠳⣤⠞⠓⢦⡴⠛⢦⡴⠒⠲⣤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠞⠳⣄⡼⠙⠦⠤ ◉ 95% ≈$7.61 opus-5-5│▌│⠞⠳⠤⠞⠳⣄⡴⠛⢦⡴⠛⠲⣤⠞⠳⣄⡞⠙⢦⡴⠋⢧⣠⠏⠳⣤⠞⠙⠦⠤ ◉ 96% ≈$14.09 opus-5-5│▌
+║⇡  56k/s ⇣  422/s ·▸····▸····▸····▸····▸·· ██░░░░ 36%║▌│⇡  32k/s ⇣   49/s ·▸····▸····▸····▸····▸·· ███░░░ 50%│▌│⇡  62k/s ⇣   96/s ·▸····▸····▸····▸····▸·· ██████ 96%│▌
+║⠏⠳⠤⠞⠳⠤⠴⠛⢦⡴⠋⢳⣠⠖⠲⣄⡖⠛⢦⡴⠒⢦⣠⠞⠳⣤⠞⠓⣆⡴⠛⠦⠤ ◉ 96% ≈$10 opus-5-5║▌│⠴⠛⠦⣤⠞⠳⣤⠞⠓⢦⡴⠛⢦⡴⠒⠲⣤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠞⠳⣄⡼⠙⠦⠤ ◉ 95% ≈$8 opus-5-5│▌│⠟⢦⡴⠚⠳⠤⠞⠳⣄⡴⠛⢦⡴⠛⠲⣤⠞⠳⣄⡞⠙⢦⡴⠋⢧⣠⠏⠳⣤⠞⠙⠦⠤ ◉ 96% ≈$14 opus-5-5│▌
 ║› run the tests and fix what breaks                  ║▌│› cache rendered pages for a minute                  │▌│› make the limiter per tenant                        │▌
 ╚═════════════════════════════════════════════════════╝▌╰─────────────────────────────────────────────────────╯▌╰─────────────────────────────────────────────────────╯▌
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
@@ -30,18 +30,18 @@
 │                                 ║         • prompt in  • call out  • result back  • failed  • token traffic                         ║▌                                │▌
 ╰─────────────────────────────────║                                                                                                   ║▌────────────────────────────────╯▌
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀║ COLORS  a session keeps one color on its card, tower, feed lines and HUD node                     ║▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-╭ ▸ SIGNAL FEED ──────────────────║ DATA    read-only: ~/.claude sessions, transcripts, subagents, workflows · no network             ║▌────────────────── all sessions ╮
-│    27s ▌api              ✓ Edit ║                                                                                                   ║▌                                │▌
-│    23s ▌webapp·12        ✓ WebSe║                                                                                                   ║▌                                │▌
-│    21s ▌docs-site        ✓ Grep ╚═══════════════════════════════════════════════════════════════════════════════════════════════════╝▌                                │▌
-│    21s ▌api              ✓ Edit  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘                                │▌
-│    20s ▌webapp·12        ✓ Skill      webapp-testing                                                                                                                  │▌
-│    19s ▌webapp·47        ✓ Bash       Run the tests                                                                                                                   │▌
+╭ ▸ SIGNAL FEED ──────────────────║ DATA    read-only: opencode sessions, messages, parts · never writes                              ║▌────────────────── all sessions ╮
+│    21s ▌docs-site        ✓ Grep ║                                                                                                   ║▌                                │▌
+│    21s ▌api              ✓ Edit ║                                                                                                   ║▌                                │▌
+│    20s ▌webapp·12        ✓ Skill╚═══════════════════════════════════════════════════════════════════════════════════════════════════╝▌                                │▌
+│    19s ▌webapp·47        ✓ Bash  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘                                │▌
 │    18s ▌api              ✓ Read       …/store/redis.go                                                                                                                │▌
 │    15s ▌webapp·12        ✓ Bash       Run the tests                                                                                                                   │▌
 │    14s ▌api              ✓ Read       …/api/main.go                                                                                                                   │▌
+│    13s ▌docs-site        ◂ Done. The change is in and the tests pass.                                                                                                 │▌
 │   9.3s ▌webapp·12        ✓ Structure…                                                                                                                                 │▌
 │   6.4s ▌docs-site        ✓ github     search_issues · checkout is:open                                                                                                │▌
+│   6.2s ▌api              ◂ Done. The change is in and the tests pass.                                                                                                 │▌
 │   6.2s ▌webapp·12        ✓ Edit       …/lib/pricing.ts                                                                                                                │▌
 │   3.2s ▌webapp·12        ✓ Edit       …/components/CartSummary.tsx                                                                                                    │▌
 │   1.9s ▌docs-site        ⠦ linear     get_issue · ENG-412                                                                                                             │▌

@@ -237,7 +237,7 @@ impl Director {
         let mut wave = vec![Span::raw(" ")];
         wave.extend(vitals::brainwave(s, now, (shot.born.elapsed().as_millis() / 90) as usize, iw.saturating_sub(2).min(60), None, t));
         let mut cache = vec![Span::raw(" ")];
-        cache.extend(vitals::reactor(s, now, shot.born.elapsed().as_millis(), t));
+        cache.extend(vitals::reactor(s, now, shot.born.elapsed().as_millis(), t, None));
         cache.push(Span::styled(format!("  {} · {}/h", vitals::money(s.cost_micros), vitals::money(vitals::money_rate(s, now))), Style::new().fg(t.dim)));
         let lines = vec![
             Line::from(Span::styled(format!(" {}", clip(&step, iw.saturating_sub(1))), Style::new().fg(t.fg))),

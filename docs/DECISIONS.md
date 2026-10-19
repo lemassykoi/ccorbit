@@ -4,6 +4,35 @@ Why things are the way they are, including what was tried and rejected. Read thi
 proposing a change in the same area; add an entry when you make a choice someone could undo
 without knowing why.
 
+## The live source is opencode, not Claude Code (2026-10-19, fork)
+
+This fork runs on a machine whose sessions are `opencode` talking to locally served models; the
+Claude Code reader was dropped entirely (`--replace entirely`, the owner's word). The record
+grammar of `Session::ingest` stayed: the new source is a *translator* from opencode's storage
+rows to those records, so `model`, `insight`, `ui` and `hud` did not move and the golden screens
+survived (only the help screen's DATA line changed). Rejected: polling `opencode serve` over HTTP
+(breaks the zero-network promise, misses the TUI's own sessions, which share the database
+anyway), and a sidecar that rewrote rows into Claude-shaped files (a second writer to keep in
+step for no fidelity gain). The database is opened `READ_ONLY`; the replay reader and the demo
+still feed records directly, in the upstream grammar.
+
+## rusqlite, the third dependency, and why the binary grew (2026-10-19, fork)
+
+Reading SQLite needs a SQLite reader. The bundled build keeps one static binary across the three
+platforms; the alternative (hand-rolled page parsing) is a hundred times the code. The binary
+grew from 1.2 MB to about 3.3 MB, and the size budget in `scripts/verify.sh` moved to 3.8 MB to
+match. The frame budget and the CPU/footprint promises did not change.
+
+## The engine pulse is the only socket (2026-10-19, fork)
+
+A local model reports no per-session cache share (opencode zeroes `cache.read`), so the true
+prefix-cache hit rate, KV fill and decode rate come from the engine itself — but reading them is
+a network call, against the house rule. Kept honest: off unless `--engines` names a JSON file of
+addresses, `http://` only, one short GET per engine per two seconds, replies capped, counters
+only; the marked lines live in `src/engines.rs` and nowhere else, which the rule test enforces
+line by line. Sessions and readings never depend on it: with no `--engines` ccorbit is exactly
+the zero-network tool it was.
+
 ## Read-only, by design (2026-10-16)
 
 ccorbit reads the files Claude Code already writes: no hook, no settings change, no command, no

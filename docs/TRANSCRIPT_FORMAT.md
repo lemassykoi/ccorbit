@@ -1,8 +1,14 @@
-# What ccorbit reads from Claude Code
+# The record format ccorbit reads (origin: Claude Code)
+
+`Session::ingest` speaks one record grammar. `--replay` plays transcript files and `--demo`
+fabricates them directly in this grammar; the live source (`src/opencode.rs`) translates opencode
+rows into these same records (see [OPENCODE_FORMAT.md](OPENCODE_FORMAT.md)). The grammar is kept
+verbatim from the upstream view of the Claude Code format, which `--replay` still reads.
 
 None of this is a documented interface: it is what Claude Code 2.1 writes, observed in real
 files. When a reading looks wrong, check the files first (`--dump` prints what ccorbit understood).
-All paths are under `~/.claude` (`$CLAUDE_CONFIG_DIR` when set; `%USERPROFILE%\.claude` on Windows).
+All paths are under `~/.claude` (`$CLAUDE_CONFIG_DIR` when set; `%USERPROFILE%\.claude` on Windows),
+for `--replay`; the live source ignores paths and reads the tables in `OPENCODE_FORMAT.md`.
 
 ## The registry: `sessions/<pid>.json`
 
