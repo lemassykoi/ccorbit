@@ -11,8 +11,9 @@ worked on. An optional read-only [engine pulse](#the-engine-pulse) sits in the f
 
 It is a single Rust binary of about 3.3 MB (SQLite rides along). It only reads the files opencode
 already writes — its storage database, opened read-only: it never writes, never runs a command and
-opens no network connection, except the opt-in [engine pulse](#the-engine-pulse). It uses 2 to 3% CPU and
-9 to 15 MB of memory, the 3D hologram included.
+opens no network connection, except the opt-in [engine pulse](#the-engine-pulse). It sits under
+1% CPU at rest and about 3 MB of memory (measured on its daily machine); the 3D hologram costs a
+few percent while it animates.
 
 ![ccorbit in demo mode: the wall of sessions, a session's vitals, the 3D hologram, the director and the code city](docs/demo.gif)
 
