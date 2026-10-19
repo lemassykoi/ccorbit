@@ -98,6 +98,9 @@ impl Director {
                     .filter(|id| ids.contains(id.as_str()))
                     .unwrap_or_else(|| sid.clone());
                 let (prio, what, color) = match (it.feed, it.kind) {
+                    // A failed shell command is everyday business (a grep with no match exits 1
+                    // when it wins): it never leads the bulletin, but it still runs in rotation.
+                    (Feed::Failed, Some(Kind::Shell)) => (1, format!("{} failed", it.label), t.err),
                     (Feed::Failed, _) => (8, format!("{} failed", it.label), t.err),
                     (Feed::Done, Some(Kind::Workflow)) => (6, "workflow done".to_string(), t.workflow),
                     (Feed::Start, Some(Kind::Workflow)) => (5, "workflow launched".to_string(), t.workflow),
@@ -253,5 +256,50 @@ impl Director {
             Line::from(Span::styled(format!(" › {}", clip(s.last_prompt().unwrap_or(""), iw.saturating_sub(3))), Style::new().fg(t.prompt))),
         ];
         f.render_widget(Paragraph::new(lines), inner);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Feed, FeedItem, Kind, Session};
+    use crate::source::World;
+    use crate::theme::THEMES;
+
+    #[test]
+    fn a_won_grep_never_leads_the_bulletin() {
+        let now_ms = 1_790_000_000_000_i64;
+        let mut world = World::demo_at(now_ms);
+        world.sessions.clear();
+        let mut s = Session::new("s1");
+        s.alive = true;
+        s.name = "c".into();
+        s.feed.push_back(FeedItem {
+            at: now_ms - 9000,
+            feed: Feed::Start,
+            kind: Some(Kind::Shell),
+            label: "Bash".into(),
+            text: "grep -E error".into(),
+            tool: None,
+        });
+        s.feed.push_back(FeedItem {
+            at: now_ms - 8000,
+            feed: Feed::Failed,
+            kind: Some(Kind::Shell),
+            label: "Bash".into(),
+            text: "no matches (exit 1)".into(),
+            tool: None,
+        });
+        s.feed.push_back(FeedItem { at: now_ms - 7000, feed: Feed::Prompt, kind: None, label: String::new(), text: "real news".into(), tool: None });
+        world.sessions.push(s);
+        let mut dir = Director::new();
+        dir.seen.insert("s1".into(), now_ms - 9001); // all three events are unseen
+        let order = vec![0usize];
+        let names: HashMap<usize, String> = HashMap::from([(0, "c".to_string())]);
+        let ids: HashSet<&str> = HashSet::new();
+        let _ = dir.update(&world, &order, &names, &[], &[], &ids, &THEMES[0]);
+        let shot = dir.shot.as_ref().expect("the bulletin opens with a shot");
+        assert!(shot.title.contains("new prompt"), "the prompt leads, not the won grep: {}", shot.title);
+        assert!(dir.queue.iter().any(|q| q.title.contains("Bash failed")), "the shell failure still runs in rotation");
     }
 }
