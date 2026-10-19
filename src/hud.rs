@@ -643,7 +643,7 @@ impl HudState {
                     (Feed::Done, Some(id)) => self.packets.push(packet(&id, &sid, t.ok)),
                     (Feed::Failed, Some(id)) => self.packets.push(packet(&id, &sid, t.err)),
                     (Feed::Failed, None) => self.spark(&sid, format!("✗ {}", it.label), t.err, now),
-                    (Feed::Answer, Some(id)) => self.packets.push(packet(&id, "core", t.dim)),
+                    (Feed::Answer, _) => self.packets.push(packet(&sid, "core", t.fg)),
                     (_, None) => self.spark(&sid, it.label.clone(), color, now),
                 }
             }
@@ -756,11 +756,17 @@ impl HudState {
             if y <= top + lines.len() as u16 {
                 break;
             }
-            let color = it.kind.map_or(t.prompt, |k| t.kind(k));
+            // the user's prompt and the agent's own words must not read the same: prompts are
+            // the prompt colour and say "prompt", answers the plain colour and say "says".
+            let (word, color) = match (it.kind, it.feed) {
+                (Some(k), _) => (it.label.clone(), t.kind(k)),
+                (None, Feed::Answer) => ("says".to_string(), t.fg),
+                (None, _) => ("prompt".to_string(), t.prompt),
+            };
             let line = Line::from(vec![
                 Span::styled(format!("▸ {:>6} ", fmt_dur(now - it.at)), Style::new().fg(t.faint)),
                 Span::styled(format!("{:<12} ", clip(s.project(), 12)), Style::new().fg(t.dim)),
-                Span::styled(format!("{} ", clip(if it.label.is_empty() { "prompt" } else { &it.label }, 10)), Style::new().fg(color)),
+                Span::styled(format!("{} ", clip(&word, 10)), Style::new().fg(color)),
                 Span::styled(it.text.clone(), Style::new().fg(if k == 0 { t.fg } else { t.dim })),
             ]);
             buf.set_line(l + 2, y, &line, width);

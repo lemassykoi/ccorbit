@@ -42,7 +42,7 @@
                                                               ⠉      ⠈ ⠁⠐⡀⠂⠐ ⠄⠠ ⠄⠠ ⠄⠠ ⠄⠠ ⠄⠠⠁⠄⠐ ⠂⡐ ⠁⠈      ⠈⠁
                                                                          ⠃          ⢸           ⠃
                                                                                     ⠘
-  ▸   6.2s api          prompt Done. The change is in and the tests pass.
+  ▸   6.2s api          says Done. The change is in and the tests pass.
   ▸   6.2s webapp       Edit …/lib/pricing.ts
   ▸   3.2s webapp       Edit …/components/CartSummary.tsx
 ┃ ▸   1.9s docs-site    linear get_issue · ENG-412                                      drag turn · wheel zoom · click lock · v flat · d director · space ping · 0 reset ┃

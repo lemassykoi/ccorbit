@@ -28,7 +28,7 @@
                                    ⠈⠐⠠ ⡀         review:design   ⠄ ⠁⠈⢆           ⡀⠄⠂⠁
                                     ⠴⠁  ⠁⠂⠠ ⠄⡀             ⢀ ⠐ ⠈  ⠄⠈ ⠘⡄   ⢀ ⠄⠂⠈⠈  ⠱⠄
                                            ⠰⠂ ⠈ ⠁⠐ ⢂⠠ ⠄⠠ ⠄⢀ ⡀⠠ ⠄⠤ ⠄⢠⠈⠂⠘ ⠁⠁ ⠲
-  ▸   6.2s api          prompt Done. The change is in and  ⢸       ⠈⠂
+  ▸   6.2s api          says Done. The change is in and th ⢸       ⠈⠂
   ▸   6.2s webapp       Edit …/lib/pricing.ts              ⠈
   ▸   3.2s webapp       Edit …/components/CartSummary.tsx
 ┃ ▸   1.9s docs-site    linear get_issdrag turn · wheel zoom · click lock · v flat · d director · space ping · 0 reset ┃

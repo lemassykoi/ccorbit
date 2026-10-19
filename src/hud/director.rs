@@ -104,6 +104,7 @@ impl Director {
                     (Feed::Done, Some(Kind::Agent)) => (5, "agent done".to_string(), t.agent),
                     (Feed::Start, Some(Kind::Agent)) => (4, "agent launched".to_string(), t.agent),
                     (Feed::Prompt, _) => (3, "new prompt".to_string(), t.prompt),
+                    (Feed::Answer, _) => (3, "the agent says".to_string(), t.fg),
                     _ => continue,
                 };
                 shot(node, prio, format!("{} · {what}", name(si)), it.text.clone(), color);
