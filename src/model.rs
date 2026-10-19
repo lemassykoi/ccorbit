@@ -421,7 +421,6 @@ impl Activity {
 pub struct Session {
     pub id: String,
     /// The Claude Code process, from the registry (0 when unknown).
-    pub pid: i64,
     pub name: String,
     pub cwd: String,
     pub status: String,
@@ -462,8 +461,6 @@ pub struct Session {
     /// How long finished calls took, by kind, to tell when a running one is unusually slow.
     pub durations: HashMap<String, Hist>,
     pub last_at: i64,
-    /// Start of the current Claude Code process: background tasks launched before it are gone.
-    pub proc_started: i64,
     index: HashMap<String, (usize, usize)>,
     agent_ids: HashMap<String, usize>,
     tasks: HashMap<String, String>,
@@ -477,7 +474,6 @@ impl Session {
     pub fn new(id: &str) -> Session {
         Session {
             id: id.to_string(),
-            pid: 0,
             name: String::new(),
             cwd: String::new(),
             status: String::new(),
@@ -506,7 +502,6 @@ impl Session {
             files: BTreeMap::new(),
             durations: HashMap::new(),
             last_at: 0,
-            proc_started: 0,
             index: HashMap::new(),
             agent_ids: HashMap::new(),
             tasks: HashMap::new(),
@@ -847,9 +842,6 @@ impl Session {
             if let Some((done, status)) = early {
                 bg.done = Some(done.max(at));
                 bg.status = status;
-            } else if self.proc_started > 0 && at < self.proc_started {
-                bg.done = Some(self.proc_started);
-                bg.status = "lost".into();
             }
             st.bg = Some(bg);
         }

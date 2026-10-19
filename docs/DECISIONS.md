@@ -103,12 +103,14 @@ read rates per model, fast mode doubled). A subscription does not bill this way,
 Their transcripts can weigh hundreds of megabytes per session. Runs already finished when ccorbit
 starts are read from their `wf_*.json` record (agents and timings, no steps).
 
-## Jumping to a tab is opt-in (2026-10-17)
+## Jumping to a tab was opt-in (2026-10-17), removed by the fork (2026-10-19)
 
-`o` reads the session's process environment for Warp's `WARP_FOCUS_URL` and runs `/usr/bin/open`
-with it, without a shell. It is the one feature that runs a command, so it needs `--allow-jump`,
-and only two variables of the environment are kept. Other terminals give no focus link: ccorbit
-brings the app forward instead.
+Upstream's `o` read a session process's environment for Warp's `WARP_FOCUS_URL` and ran
+`/usr/bin/open` with it, without a shell: the one feature that ran a command, kept honest by
+`--allow-jump` and a filter that held only two environment variables. The fork removed it
+outright: opencode sessions share one server process, so there is no per-session pid to find a
+tab by, and the flag had become a promise it could never keep. The command rule now has no
+exception, and `tests/rules.rs` checks it without one.
 
 ## Windows: tested by CI, not yet on real sessions (2026-10-17)
 

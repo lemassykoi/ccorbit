@@ -11,8 +11,7 @@ worked on. An optional read-only [engine pulse](#the-engine-pulse) sits in the f
 
 It is a single Rust binary of about 3.3 MB (SQLite rides along). It only reads the files opencode
 already writes — its storage database, opened read-only: it never writes, never runs a command and
-opens no network connection, except the opt-in [engine pulse](#the-engine-pulse) and
-[jumping to a session's tab](#jump-to-a-session). It uses 2 to 3% CPU and
+opens no network connection, except the opt-in [engine pulse](#the-engine-pulse). It uses 2 to 3% CPU and
 9 to 15 MB of memory, the 3D hologram included.
 
 ![ccorbit in demo mode: the wall of sessions, a session's vitals, the 3D hologram, the director and the code city](docs/demo.gif)
@@ -141,53 +140,6 @@ Below the cards:
 - **Keys:** `[` and `]` change the time window (hour, 6 hours, 24 hours, everything loaded), and
   Enter opens the session that touched the selected file last.
 
-### Jump to a session
-
-Start ccorbit with `--allow-jump`, point at a session (a card on the wall, the open session, a
-locked target in the hologram, a building in the city) and press `o`: the terminal tab where that
-session runs comes to the front.
-
-- **Warp:** ccorbit brings forward the exact tab. Warp gives every tab a focus link, and the
-  session's process inherits it in its environment as `WARP_FOCUS_URL`.
-- **Other macOS terminals:** ccorbit brings the terminal app forward, not the exact tab.
-
-This is off by default because it is the one thing that goes beyond reading files:
-
-- ccorbit reads the environment of that session's own process, keeps only `WARP_FOCUS_URL` and
-  `__CFBundleIdentifier`, and never stores or shows them;
-- it runs `/usr/bin/open` with the link, without a shell.
-
-Without the option, `o` only says how to turn it on.
-
-**Help (`?`)** lists every key, glyph and color. **Toasts** in the bottom right (the same one
-again shows once, with a count) announce:
-
-- an agent or workflow finished, with the race result;
-- a failed step (not shell commands: they fail too often to be news; the feed shows them, and
-  repeated failures raise a warning);
-- a session that needs you;
-- a compaction;
-- a slow or looping call;
-- a collision.
-
-A toast fades on its own after about five seconds: one that appeared while the director ran and
-"disappeared when the mouse moved" had simply expired (a second real input retires the director,
-which is by design, and the plain HUD takes over with its four-line event list). Toasts are not
-suppressed in director mode: a second screen should still say NEEDS YOU.
-
-## Readings
-
-| Reading | What it is | Where it comes from |
-|---|---|---|
-| Brainwave | Time spent thinking, writing and waiting for tools, summed over all agents | The gaps between opencode's rows. A `reasoning`, `text` or `tool` part is read once its row settles, so the interval lands where the model stopped. Reasoning text is not kept; only its timing is used. |
-| Cache reactor `◉ 97%` | Share of the input served from the prompt cache over five minutes; `✺` flares when the cache is rebuilt | The `usage` of each call. opencode reports `cache.read` at zero for a local engine, so the engine-level hit share is shown in the footer's [engine pulse](#the-engine-pulse) instead. |
-| Price `≈$12.40` | What the tokens would cost on the Anthropic API | Built-in list prices (October 2026). A local model has no list price, so ccorbit falls back to the cost opencode itself records per `step-finish`, and a model with neither is left out. |
-| Compaction ceiling | Context against the largest automatic compaction seen with the same model, and calls left at the current pace | opencode's `compaction` parts. opencode can compact earlier than the ceiling. |
-| `⚠ 9× usual` | A call running far longer than calls of its kind | Durations of finished calls, by tool, by program for shell commands and by agent type. A warning needs at least 5 minutes and 5 earlier calls, and 8 times the usual duration. |
-| `⚠ ×4 in a row` | An agent repeating the exact same call, or failing with the same tool again and again | Tool name and input |
-| `✖ collision` | A file changed by two sessions (or by two agents of one session at work at the same time) within 15 minutes | Edit and write results |
-| `△ 8m behind · ETA 12m` | A running workflow against the last earlier run of the same workflow, or of one with the same phases | Earlier workflow runs. opencode has no workflows, so this reading stays dark on the live source; `--replay` and `--demo` still show it. |
-
 ### The engine pulse
 
 With `--engines <FILE>` ccorbit reads, every two seconds, a small read-only status from the local
@@ -211,7 +163,7 @@ you pass `--engines`.
 
 | Where | Keys |
 |---|---|
-| Everywhere | `?` help · `g` HUD · `c` code city · `o` jump to the session's tab (with `--allow-jump`) · `t` theme · `x` effects on or off · `m` mouse capture off (to select text) · `q` quit |
+| Everywhere | `?` help · `g` HUD · `c` code city · `t` theme · `x` effects on or off · `m` mouse capture off (to select text) · `q` quit |
 | Wall | arrows or `hjkl` select · Enter open · mouse: click selects, click again opens, wheel moves |
 | Session | arrows or `jk` move · Enter fold · `e` expand all · `f` follow the newest step · `Tab` next session · `Esc` back |
 | HUD | `Tab` or arrows cycle targets · Enter open · `f` fly to the target · `+` `-` zoom · `0` reset the view · `v` flat or 3D · `d` director · space ping · `Esc` drop the target, then back |
@@ -226,7 +178,6 @@ you pass `--engines`.
 | `--director` | Start on the hologram with the director at the camera |
 | `--fps <N>` | Frames per second of the hologram, default 30 (60 costs about 5% CPU) |
 | `--demo` | Show made-up sessions instead of yours: to try it, or to record it without showing your work |
-| `--allow-jump` | Let `o` bring forward the terminal tab of a session (runs `open`; see [Jump to a session](#jump-to-a-session)) |
 | `--replay <FILE>` | Play back a recorded transcript in the transcript format (`.jsonl`), at speed |
 | `--speed <N>` | Replay speed, default 20 (idle stretches are skipped) |
 | `--theme <NAME>` | `phosphor` (default), `amber` or `neon` |
@@ -239,7 +190,7 @@ you pass `--engines`.
 ## What it reads
 
 Only the files opencode already writes, opened read-only. No hook, no settings change, no command;
-the network is touched only by `--engines` (see above) and `--allow-jump` (see above).
+the network is touched only by `--engines` (see above).
 
 | Path | Used for |
 |---|---|
@@ -268,8 +219,6 @@ database is opened `READ_ONLY` and WAL readers never block the writer.
   for ten minutes is treated as crashed, and its open calls close as lost. A legitimate tool that
   runs silent past ten minutes shows idle meanwhile and heals itself on the next row. A question
   waiting for an answer is never closed this way: it keeps its NEEDS YOU.
-- Jumping to a session works on macOS only, and reaches the exact tab in Warp only (opencode
-  sessions share one server process, so on other platforms `o` reports the app, not the tab).
 
 ## Development
 
@@ -300,7 +249,6 @@ cargo run --release -- --dump  # check the readings against your own sessions
 | `src/hud.rs` | The hologram: layout, camera, animation, packets, hit tests, target panel |
 | `src/hud/director.rs` | The director |
 | `src/demo.rs` | The made-up sessions of `--demo`, written as transcript records |
-| `src/jump.rs` | Jumping to a session's terminal tab (opt-in) |
 | `src/theme.rs` | Palettes, gradients, fog and the 256-color fallback |
 | `src/time.rs` | Timestamps, durations and compact numbers |
 
@@ -311,7 +259,6 @@ Hidden options for checking things without a terminal:
 - `--snapshot WxH` prints one frame of each view as text.
 - `--snapshot-html WxH DIR` writes colored HTML frames you can open in a browser.
 - `--bench-hud WxH` draws 300 frames of the hologram and reports the time each took.
-- `--jump-check` says how `o` would reach each running session, without doing it.
 
 ### Releasing
 

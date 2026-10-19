@@ -34,7 +34,6 @@ All of these are the data layer. They must not import `ratatui`, `crossterm`, `c
 | `src/price.rs` | data | API list prices and the cost of one call |
 | `src/time.rs` | data | Timestamps (parse and format), durations, compact numbers |
 | `src/demo.rs` | data | The made-up sessions of `--demo`, generated as transcript records and fed to `ingest` |
-| `src/jump.rs` | data | Opt-in: reads a session process's focus link and runs `open` (the only command ccorbit runs) |
 | `src/ui.rs` | screen | The run loop, boot, header and footer, wall, skyline, feed, session view, notices, help, keys and mouse, snapshots and dump |
 | `src/ui/vitals.rs` | screen | Instruments: brainwave, cache reactor, context gauge, race lanes |
 | `src/ui/city.rs` | screen | The code city |

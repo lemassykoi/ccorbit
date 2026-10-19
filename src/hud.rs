@@ -917,12 +917,6 @@ impl HudState {
         self.selected.is_some()
     }
 
-    /// The session of the locked target, if it belongs to one.
-    pub fn target_session(&self) -> Option<usize> {
-        let id = self.selected.as_ref()?;
-        self.hits.iter().find(|h| &h.id == id)?.session
-    }
-
     /// Zooms keeping the point under the pointer (or the view center) in place; the camera
     /// glides there over the next frames.
     fn zoom_at(&mut self, p: Option<(f64, f64)>, k: f64) {

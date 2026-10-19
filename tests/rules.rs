@@ -83,12 +83,12 @@ fn the_program_never_writes_files() {
 }
 
 #[test]
-fn only_jumping_to_a_session_runs_a_command() {
-    let found = offenders(&["Command::new", "process::Command"], "harness: allow command", |f| f != "src/jump.rs");
+fn the_program_never_runs_a_command() {
+    let found = offenders(&["Command::new", "process::Command"], "harness: allow command", |_| true);
     assert!(
         found.is_empty(),
-        "ccorbit never runs a command, except `open` in src/jump.rs behind --allow-jump (docs/INVARIANTS.md). These lines \
-         run one:\n{}\n\nFix: read the information from a file instead, or move the feature behind --allow-jump in src/jump.rs.",
+        "ccorbit never runs a command (docs/INVARIANTS.md). These lines do:\n{}\n\n\
+         Fix: read the information from a file instead.",
         found.join("\n")
     );
 }
@@ -106,18 +106,8 @@ fn the_program_never_opens_a_network_connection() {
 
 #[test]
 fn the_data_layer_knows_nothing_of_the_screen() {
-    let data = [
-        "src/model.rs",
-        "src/parse.rs",
-        "src/time.rs",
-        "src/price.rs",
-        "src/insight.rs",
-        "src/source.rs",
-        "src/demo.rs",
-        "src/jump.rs",
-        "src/opencode.rs",
-        "src/engines.rs",
-    ];
+    let data =
+        ["src/model.rs", "src/parse.rs", "src/time.rs", "src/price.rs", "src/insight.rs", "src/source.rs", "src/demo.rs", "src/opencode.rs", "src/engines.rs"];
     let found = offenders(&["ratatui", "crate::ui", "crate::hud", "crossterm"], "harness: allow ui", |f| data.contains(&f));
     assert!(
         found.is_empty(),

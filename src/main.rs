@@ -4,7 +4,6 @@ mod demo;
 mod engines;
 mod hud;
 mod insight;
-mod jump;
 mod model;
 mod opencode;
 mod parse;
@@ -36,16 +35,15 @@ OPTIONS:
     --hud                Start on the HUD (the live graph) instead of the wall
     --director           Start on the HUD with the director at the camera
     --demo               Show made-up sessions instead of yours (to try it, or record it)
-    --allow-jump         Let `o` bring forward the terminal tab of a session (runs `open`)
     --fps <N>            Frames per second of the HUD (default 30)
     --no-boot            Skip the boot animation
     --dump               Print the current state as plain text and exit
     -h, --help           Show this help
     -V, --version        Show the version
 
-ccorbit only reads: it never writes and never runs a command (except --allow-jump, which runs
-`open` when you press `o`). It opens a short read-only connection per engine, only when
---engines lists the addresses, and only the http endpoints named there.
+ccorbit only reads: it never writes and never runs a command. It opens a short read-only
+connection per engine, only when --engines lists the addresses, and only the http endpoints
+named there.
 ";
 
 pub struct Opts {
@@ -60,7 +58,6 @@ pub struct Opts {
     pub hud: bool,
     pub director: bool,
     pub demo: bool,
-    pub allow_jump: bool,
     pub fps: u32,
     pub snapshot_html: Option<(u16, u16, PathBuf)>,
 }
@@ -80,7 +77,6 @@ impl Opts {
             hud: false,
             director: false,
             demo: false,
-            allow_jump: false,
             fps: 30,
             snapshot_html: None,
         }
@@ -112,9 +108,7 @@ fn parse_args() -> Result<Opts, String> {
             "--hud" => o.hud = true,
             "--director" => o.director = true,
             "--demo" => o.demo = true,
-            "--allow-jump" => o.allow_jump = true,
             "--fps" => o.fps = args.next().and_then(|s| s.parse().ok()).filter(|n: &u32| (1..=120).contains(n)).ok_or("--fps needs a number from 1 to 120")?,
-            "--jump-check" => {}
             "--bench-hud" => {
                 args.next();
             }
@@ -182,18 +176,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // Undocumented: says how `o` would reach each running session, without doing it.
-    if std::env::args().any(|a| a == "--jump-check") {
-        world.run_to_end();
-        for s in world.sessions.iter().filter(|s| s.alive) {
-            let how = match jump::target(s.pid) {
-                Ok(jump::Target::Tab(url)) => format!("its exact Warp tab ({}…)", &url[..url.len().min(24)]),
-                Ok(jump::Target::App(app)) => format!("its terminal app only ({app})"),
-                Err(why) => why.to_string(),
-            };
-            println!("{} (pid {}): {how}", s.project(), s.pid);
-        }
-        return ExitCode::SUCCESS;
-    }
+
     if opts.dump {
         world.run_to_end();
         print!("{}", ui::dump(&mut world, &opts));

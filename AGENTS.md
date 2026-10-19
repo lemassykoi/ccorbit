@@ -6,8 +6,8 @@ Rust, three dependencies, read-only. This file is the map; the details live in `
 
 ## Promises you must not break
 
-- The program never writes a file, never runs a command (except `open` behind `--allow-jump`); it
-  opens a socket only for the opt-in `--engines` read-only pulse, in `src/engines.rs`.
+- The program never writes a file and never runs a command; it opens a socket only for the
+  opt-in `--engines` read-only pulse, in `src/engines.rs`.
 - The live source opens opencode's database `READ_ONLY` and never takes a write lock.
 - It keeps summaries, counts and times, never message bodies, reasoning text, file contents or edited text.
 - The data layer (`source`, `model`, `opencode`, `engines`, `parse`, `insight`, ...) never draws; `ui` and `hud` do.

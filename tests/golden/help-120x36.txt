@@ -8,22 +8,22 @@
 ║› run th║ MOVE    ←↑↓→ or hjkl select   tab next session or target   ⏎ open or fold                         ║▌       │▌
 ╚════════║         e expand all   f follow newest, or fly to target   0 reset the HUD view                   ║▌───────╯▌
  ▀▀▀▀▀▀▀▀║ LOOK    t theme   x effects   m mouse off, to select text   q quit                                ║▌▀▀▀▀▀▀▀▀▘
-╭ ● api ─║ JUMP    o bring the session's terminal tab forward (start with --allow-jump)                      ║▌ BUSY  ╮
-│Rate lim║ MOUSE   click selects · click again opens · wheel scrolls or zooms · drag pans                    ║▌       │▌
-│✓ Read …║ HUD     drag turn   v flat or 3D   d director (the camera runs itself)   space ping               ║▌   1.9s│▌
-│◆ 2 agen║ CITY    [ ] time window   ⏎ open the session that touched the file last                           ║▌       │▌
-│⇡  62k/s║ REPLAY  p pause   < > slower, faster                                                              ║▌░░░ 21%│▌
-│⠞⠙⣆⡴⠛⢦⡴⠚║                                                                                                   ║▌net-5-5│▌
-│› make t║ STEPS   ⠋ running  ⠋ background  ✓ done  ✗ failed  ■ stopped  ◌ never finished                    ║▌       │▌
-╰────────║ CARDS   ◆ agents  ↻ background tasks  ✦ skills  ⇄ MCP servers  ⚑ waiting for you                  ║▌───────╯▌
- ▀▀▀▀▀▀▀▀║ FLOW    ⇡ sent per minute, cache included  ⇣ generated  ██░ context vs ceiling  ⟳~12 calls left   ║▌▀▀▀▀▀▀▀▀▘
-╭ ▸ SIGNA║ VITALS  ⠔⠉⠢ thinking  ⠔⠉⠢ writing  ⠔⠉⠢ tools  ◉ 97% cache hits  ✺ cache rebuilt  ≈$ API-equivalent║▌ssions ╮
-│    21s ║ ALERTS  ⚠ call far slower than usual, or repeated  ✖ one file, two sessions  △ race vs an earlier ║▌       │▌
-│    20s ║ GRAPH   ◎ core  ○ session  ◇ agent  △ workflow  ⬡ MCP server  ✳ skill                             ║▌       │▌
-│    19s ║         • prompt in  • call out  • result back  • failed  • token traffic                         ║▌       │▌
-│    18s ║                                                                                                   ║▌       │▌
-│    15s ║ COLORS  a session keeps one color on its card, tower, feed lines and HUD node                     ║▌       │▌
-│    14s ║ DATA    read-only: opencode sessions, messages, parts · never writes                              ║▌       │▌
+╭ ● api ─║ MOUSE   click selects · click again opens · wheel scrolls or zooms · drag pans                    ║▌ BUSY  ╮
+│Rate lim║ HUD     drag turn   v flat or 3D   d director (the camera runs itself)   space ping               ║▌       │▌
+│✓ Read …║ CITY    [ ] time window   ⏎ open the session that touched the file last                           ║▌   1.9s│▌
+│◆ 2 agen║ REPLAY  p pause   < > slower, faster                                                              ║▌       │▌
+│⇡  62k/s║                                                                                                   ║▌░░░ 21%│▌
+│⠞⠙⣆⡴⠛⢦⡴⠚║ STEPS   ⠋ running  ⠋ background  ✓ done  ✗ failed  ■ stopped  ◌ never finished                    ║▌net-5-5│▌
+│› make t║ CARDS   ◆ agents  ↻ background tasks  ✦ skills  ⇄ MCP servers  ⚑ waiting for you                  ║▌       │▌
+╰────────║ FLOW    ⇡ sent per minute, cache included  ⇣ generated  ██░ context vs ceiling  ⟳~12 calls left   ║▌───────╯▌
+ ▀▀▀▀▀▀▀▀║ VITALS  ⠔⠉⠢ thinking  ⠔⠉⠢ writing  ⠔⠉⠢ tools  ◉ 97% cache hits  ✺ cache rebuilt  ≈$ API-equivalent║▌▀▀▀▀▀▀▀▀▘
+╭ ▸ SIGNA║ ALERTS  ⚠ call far slower than usual, or repeated  ✖ one file, two sessions  △ race vs an earlier ║▌ssions ╮
+│    21s ║ GRAPH   ◎ core  ○ session  ◇ agent  △ workflow  ⬡ MCP server  ✳ skill                             ║▌       │▌
+│    20s ║         • prompt in  • call out  • result back  • failed  • token traffic                         ║▌       │▌
+│    19s ║                                                                                                   ║▌       │▌
+│    18s ║ COLORS  a session keeps one color on its card, tower, feed lines and HUD node                     ║▌       │▌
+│    15s ║ DATA    read-only: opencode sessions, messages, parts · never writes                              ║▌       │▌
+│    14s ║                                                                                                   ║▌       │▌
 │    13s ║                                                                                                   ║▌       │▌
 │   9.3s ║                                                                                                   ║▌       │▌
 │   6.4s ╚═══════════════════════════════════════════════════════════════════════════════════════════════════╝▌       │▌
