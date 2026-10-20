@@ -24,6 +24,12 @@ const FACE_W: u16 = 3;
 pub const WINDOWS: [(&str, i64); 4] = [("last hour", 3_600_000), ("last 6 hours", 21_600_000), ("last 24 hours", 86_400_000), ("everything loaded", i64::MAX)];
 
 pub struct Lot {
+    /// The machine the file belongs to (empty = the local box). Two hosts editing the same path are
+    /// different files, so every key below is qualified by it.
+    pub host: String,
+    /// The building's identity: host-qualified path (equals `path` for the local box). Used for
+    /// selection, hover, hit-testing and the owner map, so same-named files on two hosts stay apart.
+    pub id: String,
     pub path: String,
     pub rel: String,
     pub reads: u32,
@@ -54,16 +60,22 @@ pub struct District {
     pub lots: Vec<usize>,
 }
 
+/// The identity of a file on a given machine: host-qualified so two boxes sharing a path differ.
+fn file_id(host: &str, path: &str) -> String {
+    if host.is_empty() { path.to_string() } else { format!("{host}\u{1}{path}") }
+}
+
 /// Every file touched within the window, merged across sessions and grouped by project: a
 /// file belongs to the session folder that contains it most closely; the rest is "elsewhere".
 pub fn gather(world: &World, order: &[usize], window: i64, ins: &Insights) -> (Vec<District>, Vec<Lot>) {
     let now = world.now;
-    let colliding: HashSet<&str> = ins.collisions.iter().map(|c| c.path.as_str()).collect();
-    let mut roots: Vec<(String, usize, String)> = Vec::new();
+    let colliding: HashSet<String> = ins.collisions.iter().map(|c| file_id(&c.host, &c.path)).collect();
+    // Project roots, per machine: the same folder on two hosts is two districts.
+    let mut roots: Vec<(String, String, usize, String)> = Vec::new();
     for &si in order {
         let s = &world.sessions[si];
-        if !s.cwd.is_empty() && !roots.iter().any(|r| r.0 == s.cwd) {
-            roots.push((s.cwd.clone(), identity(order, si), s.project().to_string()));
+        if !s.cwd.is_empty() && !roots.iter().any(|r| r.0 == s.cwd && r.1 == s.host) {
+            roots.push((s.cwd.clone(), s.host.clone(), identity(order, si), s.project().to_string()));
         }
     }
     let mut lots: Vec<Lot> = Vec::new();
@@ -74,8 +86,11 @@ pub fn gather(world: &World, order: &[usize], window: i64, ins: &Insights) -> (V
             if now.saturating_sub(f.last()) > window {
                 continue;
             }
-            let i = *by_path.entry(path.clone()).or_insert_with(|| {
+            let id = file_id(&s.host, path);
+            let i = *by_path.entry(id.clone()).or_insert_with(|| {
                 lots.push(Lot {
+                    host: s.host.clone(),
+                    id: id.clone(),
                     path: path.clone(),
                     rel: String::new(),
                     reads: 0,
@@ -88,7 +103,7 @@ pub fn gather(world: &World, order: &[usize], window: i64, ins: &Insights) -> (V
                     owner: si,
                     agent: 0,
                     sessions: Vec::new(),
-                    collide: colliding.contains(path.as_str()),
+                    collide: colliding.contains(&id),
                 });
                 lots.len() - 1
             });
@@ -110,15 +125,17 @@ pub fn gather(world: &World, order: &[usize], window: i64, ins: &Insights) -> (V
         }
     }
     let mut districts: Vec<District> = Vec::new();
-    let mut by_root: HashMap<String, usize> = HashMap::new();
+    let mut by_root: HashMap<(String, String), usize> = HashMap::new();
     for (i, l) in lots.iter_mut().enumerate() {
-        let root = roots.iter().filter(|r| crate::parse::under(&l.path, &r.0).is_some()).max_by_key(|r| r.0.len());
-        let (key, name, k) = match root {
-            Some((root, k, name)) => (root.clone(), name.clone(), *k),
-            None => (String::new(), "elsewhere".to_string(), usize::MAX),
+        let root = roots.iter().filter(|r| r.1 == l.host && crate::parse::under(&l.path, &r.0).is_some()).max_by_key(|r| r.0.len());
+        let (host, key, name, k) = match root {
+            Some((root, host, k, name)) => {
+                (host.clone(), root.clone(), if name.is_empty() || host.is_empty() { name.clone() } else { format!("{name}·{host}") }, *k)
+            }
+            None => (l.host.clone(), String::new(), "elsewhere".to_string(), usize::MAX),
         };
         l.rel = if key.is_empty() { tilde(&l.path) } else { crate::parse::under(&l.path, &key).unwrap_or(&l.path).to_string() };
-        let d = *by_root.entry(key.clone()).or_insert_with(|| {
+        let d = *by_root.entry((host.clone(), key.clone())).or_insert_with(|| {
             districts.push(District { name, root: key, k, lots: Vec::new() });
             districts.len() - 1
         });
@@ -200,7 +217,7 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[us
     let busy = lots.iter().any(|l| now - l.last_edit < 120_000);
     let inner = panel(f, city_area, t, title, Some(right), busy, false);
     app.city.hits.clear();
-    app.city.owner = lots.iter().map(|l| (l.path.clone(), l.owner)).collect();
+    app.city.owner = lots.iter().map(|l| (l.id.clone(), l.owner)).collect();
     if lots.is_empty() {
         let msg = Paragraph::new(vec![
             Line::from(Span::styled("No file read or changed in this window.", Style::new().fg(t.dim))),
@@ -253,7 +270,7 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[us
     let scale = ((max_h - 1) as f64 / peak).min(2.2);
     let frame = app.frame();
     let mut gcol = 0usize;
-    let sel = app.city.sel.clone().or_else(|| lots.iter().max_by_key(|l| l.last_edit).map(|l| l.path.clone()));
+    let sel = app.city.sel.clone().or_else(|| lots.iter().max_by_key(|l| l.last_edit).map(|l| l.id.clone()));
     app.city.sel = sel.clone();
     for &(d, cols) in &plan {
         let dist = &districts[d];
@@ -289,8 +306,8 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[us
             let gy = ground - 2 * r;
             let h = if l.edits > 0 { (1.0 + ((1 + l.added + l.removed) as f64).log2() * scale).round() as u16 } else { 1 };
             let h = h.clamp(1, max_h);
-            let picked = sel.as_deref() == Some(l.path.as_str());
-            let hovered = app.city.hover.as_deref() == Some(l.path.as_str());
+            let picked = sel.as_deref() == Some(l.id.as_str());
+            let hovered = app.city.hover.as_deref() == Some(l.id.as_str());
             let age = now - l.last_edit.max(l.last_read);
             let tint = if l.edits == 0 { mix(base, (110, 110, 110), 0.6) } else { base };
             let bright = match age {
@@ -314,7 +331,7 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[us
                 put(buf, x0 + 2, top.saturating_sub(if l.collide || now - l.last_edit < 90_000 { 2 } else { 1 }), "▼", if picked { t.hi } else { t.dim });
             }
             let rect = Rect::new(x0, top, FACE_W + 2, h + 2).intersection(inner);
-            app.city.hits.push((rect, l.path.clone(), gcol + c as usize, r as usize));
+            app.city.hits.push((rect, l.id.clone(), gcol + c as usize, r as usize));
         }
         gcol += cols as usize;
         x += block_w + 4;
@@ -324,7 +341,7 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[us
         f.buffer_mut().set_string(city_area.x + 2, city_area.bottom().saturating_sub(2), more, Style::new().fg(t.faint));
     }
     // The building pointed at, named at the top.
-    if let Some(l) = app.city.hover.as_ref().or(sel.as_ref()).and_then(|p| lots.iter().find(|l| &l.path == p)) {
+    if let Some(l) = app.city.hover.as_ref().or(sel.as_ref()).and_then(|p| lots.iter().find(|l| &l.id == p)) {
         let names = names(world, order);
         let who = names.get(&l.owner).cloned().unwrap_or_default();
         let line = fit(
@@ -405,8 +422,9 @@ fn side_panel(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usiz
     let inner = panel(f, lot_area, t, Line::from(Span::styled(" ◢ LOT ", Style::new().fg(t.fg).add_modifier(Modifier::BOLD))), None, false, false);
     let kv = |k: &str, v: String, c: Color| Line::from(vec![Span::styled(format!("{k:<8} "), Style::new().fg(t.faint)), Span::styled(v, Style::new().fg(c))]);
     let mut lines = Vec::new();
-    if let Some(l) = sel.and_then(|p| lots.iter().find(|l| l.path == p)) {
+    if let Some(l) = sel.and_then(|p| lots.iter().find(|l| l.id == p)) {
         let owner = names.get(&l.owner).cloned().unwrap_or_default();
+        let owner = if l.host.is_empty() { owner } else { format!("{owner} · {}", l.host) };
         let s = &world.sessions[l.owner];
         let agent = if l.agent == 0 { "main".to_string() } else { s.agents.get(l.agent).map_or("agent".into(), |a| clip(&a.description, 24)) };
         lines.push(Line::from(Span::styled(clip(&l.rel, inner.width as usize), Style::new().fg(t.hi).add_modifier(Modifier::BOLD))));
@@ -467,7 +485,7 @@ fn side_panel(f: &mut Frame, area: Rect, app: &App, world: &World, order: &[usiz
         .map(|l| {
             let bar = ((l.added + l.removed) as f64 / top as f64 * 6.0).ceil() as usize;
             let color = t.session(identity(order, l.owner));
-            let mut style = Style::new().fg(if sel == Some(l.path.as_str()) { t.hi } else { t.fg });
+            let mut style = Style::new().fg(if sel == Some(l.id.as_str()) { t.hi } else { t.fg });
             if now - l.last_edit < 120_000 {
                 style = style.add_modifier(Modifier::BOLD);
             }

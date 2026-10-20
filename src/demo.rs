@@ -1,4 +1,4 @@
-//! `--demo`: four made-up sessions at work, for trying ccorbit without Claude Code or showing it
+//! `--demo`: four made-up sessions at work, for trying ccorbit without a live opencode or showing it
 //! without showing real work. Their activity is written as transcript records and fed through
 //! the same reader as real ones. Nothing is read from disk and nothing is written.
 //!
@@ -37,7 +37,7 @@ static PROFILES: [Profile; 4] = [
         name: "webapp-12",
         cwd: "/home/demo/code/webapp",
         title: "Checkout redesign",
-        model: "claude-opus-5-5",
+        model: "qwen3.8-flash-next",
         files: &["src/components/CartSummary.tsx", "src/components/PaymentForm.tsx", "src/styles/checkout.css", "src/lib/pricing.ts", "src/lib/coupons.ts"],
         test: "npm test -- checkout",
         prompts: &["make the checkout a single page", "the coupon field should validate inline", "run the tests and fix what breaks"],
@@ -48,7 +48,7 @@ static PROFILES: [Profile; 4] = [
         name: "webapp-47",
         cwd: "/home/demo/code/webapp",
         title: "Server-side rendering",
-        model: "claude-opus-5-5",
+        model: "qwen3.8-flash-next",
         files: &["server/render.ts", "server/cache.ts", "src/entry-server.tsx", "vite.config.ts"],
         test: "npm run test:ssr",
         prompts: &["render the product pages on the server", "cache rendered pages for a minute"],
@@ -59,7 +59,7 @@ static PROFILES: [Profile; 4] = [
         name: "api-3",
         cwd: "/home/demo/code/api",
         title: "Rate limiter per tenant",
-        model: "claude-opus-5-5",
+        model: "qwen3.8-flash-next",
         files: &["limiter/token_bucket.go", "limiter/tenant.go", "limiter/limiter_test.go", "cmd/api/main.go", "internal/store/redis.go"],
         test: "go test ./limiter/...",
         prompts: &["make the limiter per tenant", "add a burst allowance", "load test it at 5k requests per second"],
@@ -70,7 +70,7 @@ static PROFILES: [Profile; 4] = [
         name: "docs-site-9",
         cwd: "/home/demo/code/docs-site",
         title: "Docs search",
-        model: "claude-sonnet-5-5",
+        model: "qwen3.8",
         files: &["content/guide/search.md", "src/search/index.ts", "src/search/rank.ts", "astro.config.mjs"],
         test: "pnpm build",
         prompts: &["add full-text search to the docs", "rank exact title matches first"],
@@ -250,11 +250,14 @@ impl Demo {
         let model = if agent.is_empty() {
             PROFILES[si].model
         } else if agent.starts_with("ex") {
-            "claude-haiku-5-5"
+            "qwen3.8-flash"
         } else {
-            "claude-sonnet-5-5"
+            "qwen3.8-coder"
         };
         let write = if rebuild { ctx.saturating_sub(4000) } else { self.between(800, 4000) as u64 };
+        // opencode prices its own calls; the table has no local model, so the demo carries the
+        // number the same way a live session does (this is what the reader bakes into usage).
+        let cost = (3.0 * 4.0 + write as f64 * 5.0 + (ctx.saturating_sub(write)) as f64 * 0.20 + out as f64 * 20.0).round() as u64;
         let usage = json!({
             "input_tokens": 3,
             "cache_creation_input_tokens": write,
@@ -262,6 +265,7 @@ impl Demo {
             "output_tokens": out,
             "output_tokens_details": {"thinking_tokens": think},
             "cache_creation": {"ephemeral_1h_input_tokens": write, "ephemeral_5m_input_tokens": 0},
+            "ccorbit_cost_micros": cost,
             "speed": "standard"
         });
         let mut t = at;
@@ -421,7 +425,7 @@ impl Demo {
                 let so = self.id("toolu");
                 s = self.call(si, &id, s + 1_000, "text", vec![(so.clone(), "StructuredOutput", json!({"ok": true}))], 300, 100, 30_000, false);
                 self.result(si, &id, s + 200, &so, "ok", false, json!({}));
-                agents.push(json!({"type": "workflow_agent", "agentId": id, "label": label, "phaseIndex": phase + 1, "state": "done", "startedAt": start, "durationMs": s - start, "model": "claude-sonnet-5-5"}));
+                agents.push(json!({"type": "workflow_agent", "agentId": id, "label": label, "phaseIndex": phase + 1, "state": "done", "startedAt": start, "durationMs": s - start, "model": "qwen3.8-coder"}));
                 phase_end = phase_end.max(s + 300);
             }
             at = phase_end + 1_000;

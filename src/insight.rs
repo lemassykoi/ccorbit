@@ -52,7 +52,7 @@ impl Alert {
     }
 }
 
-/// The largest automatic compaction seen with `model` in any session: where Claude Code
+/// The largest automatic compaction seen with `model` in any session: where the model
 /// compacts at the latest. It may compact earlier, so this is a ceiling, not a promise.
 pub fn ceiling(world: &World, model: &str) -> Option<u64> {
     world.sessions.iter().flat_map(|s| &s.compactions).filter(|c| c.auto && c.model == model).map(|c| c.pre).max()
@@ -137,12 +137,17 @@ pub fn alerts(world: &World) -> Vec<Alert> {
     out
 }
 
+/// One recent edit of a file: session, agent, time.
+type Edit = (usize, usize, i64);
+
 /// A file changed by two sessions, or by two agents of one session both still at work, within
-/// a quarter of an hour.
+/// a quarter of an hour. Only sessions on the *same machine* can collide on a path: two hosts each
+/// editing `/home/x/app.ts` are editing different files, so the path is qualified by host.
 pub struct Collision {
+    pub host: String,
     pub path: String,
     /// Session, agent, time of each recent edit.
-    pub who: Vec<(usize, usize, i64)>,
+    pub who: Vec<Edit>,
     pub at: i64,
 }
 
@@ -157,7 +162,7 @@ impl Collision {
 
 pub fn collisions(world: &World) -> Vec<Collision> {
     let now = world.now;
-    let mut by_path: BTreeMap<&str, Vec<(usize, usize, i64)>> = BTreeMap::new();
+    let mut by_path: BTreeMap<(&str, &str), Vec<Edit>> = BTreeMap::new();
     for (si, s) in world.sessions.iter().enumerate() {
         if !s.alive {
             continue;
@@ -167,7 +172,7 @@ pub fn collisions(world: &World) -> Vec<Collision> {
                 continue;
             }
             for &(a, at) in f.editors.iter().filter(|(_, at)| now - at <= COLLIDE_MS) {
-                by_path.entry(path.as_str()).or_default().push((si, a, at));
+                by_path.entry((s.host.as_str(), path.as_str())).or_default().push((si, a, at));
             }
         }
     }
@@ -183,7 +188,7 @@ pub fn collisions(world: &World) -> Vec<Collision> {
             let working: HashSet<usize> = who.iter().map(|w| w.1).filter(|&a| s.agent_running(a)).collect();
             working.len() > 1
         })
-        .map(|(path, who)| Collision { path: path.to_string(), at: who.iter().map(|w| w.2).max().unwrap_or(0), who })
+        .map(|((host, path), who)| Collision { host: host.to_string(), path: path.to_string(), at: who.iter().map(|w| w.2).max().unwrap_or(0), who })
         .collect();
     out.sort_by_key(|c| std::cmp::Reverse(c.at));
     out

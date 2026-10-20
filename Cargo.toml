@@ -1,8 +1,8 @@
 [package]
 name = "ccorbit"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
-authors = ["Pierre CANGEMI"]
+authors = ["Clément PAPPALARDO", "Pierre CANGEMI"]
 description = "A live, read-only terminal view of every opencode session on this machine: wall, 3D HUD, code city"
 repository = "https://github.com/lemassykoi/ccorbit"
 license = "MIT OR Apache-2.0"

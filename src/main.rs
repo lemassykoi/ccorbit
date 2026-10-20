@@ -2,9 +2,11 @@
 
 mod demo;
 mod engines;
+mod hosts;
 mod hud;
 mod insight;
 mod model;
+mod net;
 mod opencode;
 mod parse;
 mod price;
@@ -32,6 +34,8 @@ OPTIONS:
     --opencode-db <DIR>  opencode storage database (default: $XDG_DATA_HOME/opencode/opencode.db,
                          or opencode.db in your data folder)
     --engines <FILE>     JSON file listing local LLM engines to show a pulse of (see README)
+    --hosts <FILE>       JSON file listing remote ccorbit exporters to fold into the wall (see README)
+    --export <ADDR>      Publish this machine's summaries to other ccorbits, at host:port (see README)
     --hud                Start on the HUD (the live graph) instead of the wall
     --director           Start on the HUD with the director at the camera
     --demo               Show made-up sessions instead of yours (to try it, or record it)
@@ -42,13 +46,16 @@ OPTIONS:
     -V, --version        Show the version
 
 ccorbit only reads: it never writes and never runs a command. It opens a short read-only
-connection per engine, only when --engines lists the addresses, and only the http endpoints
-named there.
+connection per engine (when --engines lists them) and per remote host (when --hosts lists them),
+and --export listens on one address to publish body-free summaries; all are http:// and opt-in,
+and all sockets live in src/net.rs.
 ";
 
 pub struct Opts {
     pub db_path: PathBuf,
     pub engines: Option<PathBuf>,
+    pub hosts: Option<PathBuf>,
+    pub export: Option<String>,
     pub replay: Option<PathBuf>,
     pub speed: f64,
     pub theme: usize,
@@ -68,6 +75,8 @@ impl Opts {
         Opts {
             db_path,
             engines: None,
+            hosts: None,
+            export: None,
             replay: None,
             speed: 20.0,
             theme: 0,
@@ -104,6 +113,8 @@ fn parse_args() -> Result<Opts, String> {
             }
             "--opencode-db" => o.db_path = args.next().ok_or("--opencode-db needs a path")?.into(),
             "--engines" => o.engines = Some(args.next().ok_or("--engines needs a path")?.into()),
+            "--hosts" => o.hosts = Some(args.next().ok_or("--hosts needs a path")?.into()),
+            "--export" => o.export = Some(args.next().ok_or("--export needs a host:port address")?),
             "--no-boot" => o.boot = false,
             "--hud" => o.hud = true,
             "--director" => o.director = true,
@@ -140,6 +151,16 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // The exporter is a daemon mode: read the database, answer GET /export, never draw a screen.
+    if let Some(bind) = opts.export.clone() {
+        let key = net::read_key(&net::expand_home("~/.config/ccorbit/host-key"));
+        let name = host_name_for(&bind);
+        if let Err(e) = opencode::Open::export_serve(opts.db_path.clone(), &bind, key.as_deref(), name) {
+            eprintln!("ccorbit: {e}");
+            return ExitCode::FAILURE;
+        }
+        return ExitCode::SUCCESS;
+    }
     let mut world = match &opts.replay {
         Some(path) => match source::World::replay(path, opts.speed) {
             Ok(w) => w,
@@ -149,7 +170,7 @@ fn main() -> ExitCode {
             }
         },
         None if opts.demo => source::World::demo(),
-        None => source::World::opencode(opts.db_path.clone()),
+        None => source::World::opencode(opts.db_path.clone(), opts.hosts.clone()),
     };
     if let Some((w, h, dir)) = &opts.snapshot_html {
         world.run_to_end();
@@ -200,4 +221,20 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// The name the exporter puts in its envelope, shown on each remote card. A bind address that names
+/// a real host uses it; a wildcard bind falls back to the machine's own hostname (read from files
+/// and the environment — never a command).
+fn host_name_for(bind: &str) -> String {
+    let host = bind.rsplit_once(':').map(|(h, _)| h).unwrap_or(bind);
+    if !host.is_empty() && host != "0.0.0.0" && host != "::" && host != "*" {
+        return host.to_string();
+    }
+    std::fs::read_to_string("/etc/hostname")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("HOSTNAME").ok().filter(|s| !s.is_empty()))
+        .unwrap_or_else(|| "host".to_string())
 }

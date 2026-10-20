@@ -79,3 +79,25 @@ opencode leaves no process identity behind, so ccorbit decides alone:
 - The `question` tool's row stays `running` while the person decides: an open `AskUserQuestion`
   step is the `NEEDS YOU` signal.
 - A dismissed question arrives as `status: "error"`; it counts as a failed step, not a hang.
+
+## The `opencode serve` HTTP surface (checked 2026-10-19, not used)
+
+v0.4 reads remote hosts through the exporter, **not** a serve (see DECISIONS.md, "Remote opencode
+hosts"). These facts were verified against the live box to settle that choice and are kept so a future
+hybrid starts from evidence, not the old wrong assumption that a serve cannot see other processes:
+
+- **A serve reads the shared `opencode.db`, not just its own instance.** The `opencode serve` on
+  `127.0.0.1:4097` (the OTG) listed the session this note was written in and the build session that
+  wrote the design note — both owned by *other* processes — and their `time.updated` matched the
+  database exactly (the surface is live). So a deliberately started serve can see TUI sessions.
+- **`GET /session` is summary-only**: `id`, `parentID`, `directory`, `title`, `model.{id,providerID,variant}`,
+  `cost`, `tokens.{input,output,reasoning,cache.{read,write}}`, `time.{created,updated}`,
+  `summary.{additions,deletions,files}`. No message bodies. Default page 100; `?limit=1000` honoured.
+  It listed **167** of the database's **202** sessions — the serve's set is not the raw table, so a
+  serve-based reader cannot trust it as the ground truth.
+- **`GET /session/:id/message` carries bodies**: each message returns `{info, parts[]}`, and `parts`
+  hold `text` (the prompt verbatim), `reasoning.text` (the chain of thought), and tool parts. This is
+  why A was rejected for the deep views: it either ships bodies across the wire or cannot open a session.
+- The endpoints the design note listed as working in 1.19 are `GET /session`, `/session/:id/message`,
+  `/session/:id/children`, `/permission`. The cockpit's own serve (here `127.0.0.1:4096`) gates them
+  with an auth token (401 without); the OTG's was open on loopback — do not assume either posture.

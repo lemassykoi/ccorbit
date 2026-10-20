@@ -1,10 +1,10 @@
-▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$343/h
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$474/h
 ╔ ⠦ webapp·12 ═════════════════════════════════════ BUSY  ╗ ╭ ⠦ webapp·47 ───────────────────────────────────── BUSY  ╮
 ║Checkout redesign                                        ║▌│Server-side rendering                                    │▌
 ║⠦ model      thinking or writing the next step       1.3s║▌│⠦ model      thinking or writing the next step       2.1s│▌
 ║✖ checkout.tsx  △ on pace · ETA 3m29s  ◆ 3 running of 5  ║▌│✖ checkout.tsx  ◆ 1 agent  ⇄ github, linear              │▌
 ║⇡  56k/s╔ ? HELP · any key closes ══════════════════════════════════════════════════════════════════════════╗ ░░░ 50%│▌
-║⠴⠛⢦⡴⠋⠳⠤⠞║ VIEWS   wall start   ⏎ session tree   g HUD hologram   c code city   esc back                     ║▌pus-5-5│▌
+║⠴⠛⢦⡴⠋⢳⣠⠖║ VIEWS   wall start   ⏎ session tree   g HUD hologram   c code city   esc back                     ║▌sh-next│▌
 ║› run th║ MOVE    ←↑↓→ or hjkl select   tab next session or target   ⏎ open or fold                         ║▌       │▌
 ╚════════║         e expand all   f follow newest, or fly to target   0 reset the HUD view                   ║▌───────╯▌
  ▀▀▀▀▀▀▀▀║ LOOK    t theme   x effects   m mouse off, to select text   q quit                                ║▌▀▀▀▀▀▀▀▀▘
@@ -13,7 +13,7 @@
 │✓ Read …║ CITY    [ ] time window   ⏎ open the session that touched the file last                           ║▌   1.9s│▌
 │◆ 2 agen║ REPLAY  p pause   < > slower, faster                                                              ║▌       │▌
 │⇡  62k/s║                                                                                                   ║▌░░░ 21%│▌
-│⠞⠙⣆⡴⠛⢦⡴⠚║ STEPS   ⠋ running  ⠋ background  ✓ done  ✗ failed  ■ stopped  ◌ never finished                    ║▌net-5-5│▌
+│⠞⠳⣄⡴⠛⢦⡴⠛║ STEPS   ⠋ running  ⠋ background  ✓ done  ✗ failed  ■ stopped  ◌ never finished                    ║▌qwen3.8│▌
 │› make t║ CARDS   ◆ agents  ↻ background tasks  ✦ skills  ⇄ MCP servers  ⚑ waiting for you                  ║▌       │▌
 ╰────────║ FLOW    ⇡ sent per minute, cache included  ⇣ generated  ██░ context vs ceiling  ⟳~12 calls left   ║▌───────╯▌
  ▀▀▀▀▀▀▀▀║ VITALS  ⠔⠉⠢ thinking  ⠔⠉⠢ writing  ⠔⠉⠢ tools  ◉ 97% cache hits  ✺ cache rebuilt  ≈$ API-equivalent║▌▀▀▀▀▀▀▀▀▘

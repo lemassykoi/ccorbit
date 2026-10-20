@@ -3,11 +3,13 @@
 [![CI](https://github.com/lemassykoi/ccorbit/actions/workflows/ci.yml/badge.svg)](https://github.com/lemassykoi/ccorbit/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-**This is a local fork:** the live source is [opencode](https://opencode.ai) rather than Claude
-Code, and the sessions shown are the ones talking to the LLM lanes served on this machine. It shows
+**This is a local fork:** the live source is [opencode](https://opencode.ai), and the sessions
+shown are the ones talking to the LLM lanes served on this machine. It shows
 sessions, subagents, skills and MCP servers, token flow, cost and context, as a wall of cards, a
 live tree per session, a 3D hologram you can turn with the mouse, and a city of the files being
-worked on. An optional read-only [engine pulse](#the-engine-pulse) sits in the footer.
+worked on. An optional read-only [engine pulse](#the-engine-pulse) sits in the footer, and
+[remote hosts](#remote-hosts) let one **central** ccorbit watch the sessions on your other machines
+(each publishing in **server mode** with `--export`).
 
 **Compatibility:** this fork's live source is tested against **opencode 1.19** only. opencode's
 storage schema is undocumented and moves; other versions may misread or show nothing (never
@@ -16,7 +18,8 @@ worse: the database is opened read-only, and a failed query reopens on the next 
 
 It is a single Rust binary of about 3.3 MB (SQLite rides along). It only reads the files opencode
 already writes — its storage database, opened read-only: it never writes, never runs a command and
-opens no network connection, except the opt-in [engine pulse](#the-engine-pulse). It sits under
+opens no network connection, except the opt-in [engine pulse](#the-engine-pulse) and — when you list
+them — the body-free [remote hosts](#remote-hosts) exchange. It sits under
 1% CPU at rest and about 3 MB of memory (measured on its daily machine); the 3D hologram costs a
 few percent while it animates.
 
@@ -40,7 +43,7 @@ git clone https://github.com/lemassykoi/ccorbit.git && cd ccorbit
 cargo install --path .
 ```
 
-It is not on crates.io: that name is the upstream Claude Code original.
+It is not on crates.io: that name is the upstream original this forked from.
 
 Then run it:
 
@@ -78,7 +81,7 @@ SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk cargo build --rele
 
 Every session keeps one color everywhere: on its card, its tower, its feed lines, its planet in
 the hologram and its district in the city. Two sessions in the same folder get a suffix
-(`webapp·63`).
+(`webapp·63`); a session from a remote host carries a host chip (`webapp · spark`).
 
 ### Wall (the start screen)
 
@@ -170,8 +173,50 @@ engine in the footer. The file is a JSON array, for example:
 
 `kind` is `vllm` (a Prometheus `/metrics`) or `strata` (a llama.cpp-style `/status`); it is
 inferred from the url when left out. Only `http://` is read, replies are capped, and the addresses
-are exactly those you wrote — this is the one place ccorbit opens a socket, and it is off unless
-you pass `--engines`.
+are exactly those you wrote — the engine pulse and the two remote-host surfaces below are the only
+network ccorbit ever uses, all through `src/net.rs`, and all off unless their flag is passed.
+
+### Remote hosts
+
+You run opencode on more than one machine and want one ccorbit to watch them all. It splits into
+two roles, both opt-in: a **server** (`--export`) on each box publishes **body-free summaries**, and
+a **central** (`--hosts`) polls them into one wall; a host that is down degrades on its own (its
+cards dim, then leave) and never blocks the others.
+
+**Server mode** — on every host (including, if you like, the central one), run the exporter as a service:
+
+```sh
+mkdir -p ~/.config/ccorbit
+head -c 32 /dev/urandom | base64 > ~/.config/ccorbit/host-key   # one shared LAN key
+chmod 600 ~/.config/ccorbit/host-key
+ccorbit --export 0.0.0.0:30002                                    # publish this box's summaries
+```
+
+It reads only this box's `opencode.db` (read-only), and answers `GET /export` — with the
+`~/.config/ccorbit/host-key` token presented — by shipping the same one-line summaries ccorbit keeps
+in memory: never message bodies, reasoning text, edited text or file contents.
+
+**Central mode** — on the box you watch from, list the peers in a JSON file and point `--hosts` at it:
+
+```json
+[
+  { "name": "spark",  "url": "http://10.0.0.126:30002", "token_file": "~/.config/ccorbit/host-key" },
+  { "name": "build",  "url": "http://10.0.0.134:30002", "token_file": "~/.config/ccorbit/host-key" }
+]
+```
+
+```sh
+ccorbit --hosts ~/.config/ccorbit/hosts.json
+```
+
+Remote sessions get a host chip on their card, in the header, the skyline and the code city; the
+city keeps each machine's files in its own district, so two boxes editing `/home/you/app.ts` are not
+mistaken for one file or a collision. Polling is `http://` only, one short connection per host per
+second (backing off on failure), to the exact addresses you listed. This assumes a trusted LAN, like
+`--engines`; it is not a tunnel and not encryption — do not export to an untrusted network. The
+exporter refuses to serve without a key, and a host that disagrees on the wire or opencode version is
+shown as an error rather than misread. See [docs/DECISIONS.md](docs/DECISIONS.md), "Remote opencode
+hosts", for why this is an exporter and not `opencode serve`.
 
 ## Keys
 
@@ -197,6 +242,8 @@ you pass `--engines`.
 | `--theme <NAME>` | `phosphor` (default), `amber` or `neon` |
 | `--opencode-db <PATH>` | opencode storage database, default `$XDG_DATA_HOME/opencode/opencode.db` |
 | `--engines <FILE>` | JSON file listing the local LLM engines to show a read-only pulse of (see [The engine pulse](#the-engine-pulse)) |
+| `--hosts <FILE>` | JSON file listing remote ccorbit exporters to fold into the wall (see [Remote hosts](#remote-hosts)) |
+| `--export <ADDR>` | Publish this machine's summaries to other ccorbits, at `host:port` (see [Remote hosts](#remote-hosts)) |
 | `--no-boot` | Skip the boot animation |
 | `--dump` | Print every session and its readings as plain text, then exit |
 | `--help`, `--version` | Print the options, or the version, then exit |
@@ -204,7 +251,8 @@ you pass `--engines`.
 ## What it reads
 
 Only the files opencode already writes, opened read-only. No hook, no settings change, no command;
-the network is touched only by `--engines` (see above).
+the network is touched only by `--engines` and, when you opt in, the body-free `--hosts`/`--export`
+exchange (see above) — all of it through `src/net.rs`.
 
 | Path | Used for |
 |---|---|
@@ -254,6 +302,8 @@ cargo run --release -- --dump  # check the readings against your own sessions
 | `src/source.rs` | The three sources — live opencode, replay, demo — and the `World` clock |
 | `src/opencode.rs` | The live source: reads opencode's storage database, translates rows into transcript records |
 | `src/engines.rs` | The read-only engine pulse: vLLM Prometheus and llama.cpp-style status over one short HTTP GET each |
+| `src/hosts.rs` | The `--hosts` poller: folds remote ccorbit exporters' summaries into the wall (host-qualified ids, per-host staleness and backoff) |
+| `src/net.rs` | The only socket code: the shared `http_get` client (behind `--engines` and `--hosts`) and the `--export` `TcpListener` |
 | `src/model.rs` | Session state built from transcript lines: steps, agents, tokens, phases, files, compactions |
 | `src/insight.rs` | Readings across sessions: slow and looping calls, collisions, workflow races, compaction ceilings |
 | `src/price.rs` | API list prices |
@@ -280,7 +330,7 @@ Hidden options for checking things without a terminal:
 Releases are built by [dist](https://axodotdev.github.io/cargo-dist/) from a version tag:
 
 1. Set the version in `Cargo.toml`, move the changes in `CHANGELOG.md` under it, commit to `main`.
-2. Tag and push: `git tag -a v0.2.0 -m "ccorbit 0.2.0" && git push origin v0.2.0`. The release
+2. Tag and push: `git tag -a v0.4.0 -m "ccorbit 0.4.0" && git push origin v0.4.0`. The release
    workflow builds the archives and the installer and publishes them as a GitHub release on this
    repository.
 3. The fork does not publish to crates.io (the name is upstream's) and does not feed the upstream

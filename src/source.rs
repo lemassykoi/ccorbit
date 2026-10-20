@@ -9,6 +9,7 @@ use std::time::Instant;
 use serde_json::Value;
 
 use crate::demo::Demo;
+use crate::hosts::Hosts;
 use crate::model::{PastRun, Session};
 use crate::opencode::Open;
 use crate::time::{now_ms, parse_iso_ms};
@@ -21,6 +22,8 @@ pub struct World {
     pub history: Vec<PastRun>,
     /// A fixed clock instead of the real one, so tests see the same moment every time.
     pub frozen: Option<i64>,
+    /// Remote opencode hosts polled into the same wall (empty without `--hosts`).
+    pub hosts: Hosts,
 }
 
 pub enum Mode {
@@ -50,23 +53,32 @@ enum EvKind {
 }
 
 impl World {
-    /// The live source: this machine's opencode sessions, read from its storage database.
-    pub fn opencode(db_path: PathBuf) -> World {
-        World { sessions: Vec::new(), now: now_ms(), history: Vec::new(), mode: Mode::Opencode(Open::watch(db_path)), frozen: None }
+    /// The live source: this machine's opencode sessions from its storage database, plus any
+    /// remote hosts listed in `--hosts` (folded into the same wall, keyed by host-qualified ids).
+    pub fn opencode(db_path: PathBuf, hosts_file: Option<PathBuf>) -> World {
+        let hosts = hosts_file.map(|p| Hosts::load(&p)).unwrap_or_else(Hosts::none);
+        World { sessions: Vec::new(), now: now_ms(), history: Vec::new(), mode: Mode::Opencode(Open::watch(db_path)), frozen: None, hosts }
     }
 
     /// Made-up sessions, generated as they go (`--demo`).
     pub fn demo() -> World {
         let now = now_ms();
         let (demo, sessions, history) = Demo::start(now);
-        World { sessions, now, history, mode: Mode::Demo(demo), frozen: None }
+        World { sessions, now, history, mode: Mode::Demo(demo), frozen: None, hosts: Hosts::none() }
     }
 
     /// The demo at a fixed moment that never moves: the same screens every time, for tests.
     #[cfg(test)]
     pub fn demo_at(now: i64) -> World {
         let (demo, sessions, history) = Demo::start(now);
-        World { sessions, now, history, mode: Mode::Demo(demo), frozen: Some(now) }
+        World { sessions, now, history, mode: Mode::Demo(demo), frozen: Some(now), hosts: Hosts::none() }
+    }
+
+    /// A world of caller-supplied sessions at a frozen moment, for readings tests (collisions ...).
+    #[cfg(test)]
+    pub fn probe(sessions: Vec<Session>, now: i64) -> World {
+        let mode = Mode::Replay(Replay { events: Vec::new(), files: Vec::new(), next: 0, sim: 0.0, last: Instant::now(), speed: 1.0, paused: false });
+        World { sessions, now, history: Vec::new(), mode, frozen: Some(now), hosts: Hosts::none() }
     }
 
     pub fn is_demo(&self) -> bool {
@@ -120,13 +132,14 @@ impl World {
             history: Vec::new(),
             mode: Mode::Replay(Replay { events, files, next: 0, sim: start as f64, last: Instant::now(), speed, paused: false }),
             frozen: None,
+            hosts: Hosts::none(),
         })
     }
 
     /// Reads whatever is new. Returns whether anything changed.
     pub fn tick(&mut self) -> bool {
         let clock = self.frozen.unwrap_or_else(now_ms);
-        match &mut self.mode {
+        let mut changed = match &mut self.mode {
             Mode::Opencode(oc) => {
                 self.now = clock;
                 oc.tick(&mut self.sessions, self.now)
@@ -136,7 +149,13 @@ impl World {
                 self.now = clock;
                 d.tick(self.now, &mut self.sessions, &mut self.history)
             }
+        };
+        // Remote hosts fold into the same wall; a no-op without --hosts (and not run in replay/demo).
+        if matches!(self.mode, Mode::Opencode(_)) {
+            let now = self.now;
+            changed |= self.hosts.tick(&mut self.sessions, now);
         }
+        changed
     }
 
     /// Loads everything available now: one live poll, or the whole replay.
@@ -148,6 +167,8 @@ impl World {
                 oc.tick(&mut self.sessions, self.now);
                 // A second poll lets rows whose stream settled in between arrive.
                 oc.tick(&mut self.sessions, self.now);
+                let now = self.now;
+                self.hosts.tick(&mut self.sessions, now);
             }
             Mode::Replay(r) => {
                 replay_tick(r, &mut self.sessions, &mut self.now, true);

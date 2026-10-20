@@ -1027,10 +1027,14 @@ fn build(
         let color = rgb(t.towers[k % t.towers.len()]);
         let s_ix = nodes.len();
         session_ix.insert(si, s_ix);
+        let mut label = names.get(&si).map_or(s.project(), String::as_str).to_string();
+        if !s.host.is_empty() {
+            label = format!("{label}·{}", s.host);
+        }
         nodes.push(Node {
             id: sid.clone(),
             kind: NodeKind::Session,
-            label: clip(names.get(&si).map_or(s.project(), String::as_str), 18),
+            label: clip(&label, 18),
             sub: if rate > 0 {
                 format!("{}/m", fmt_n(rate))
             } else if s.alive {
@@ -1179,7 +1183,7 @@ fn target_lines(h: &Hit, world: &World, t: &Theme) -> Vec<Line<'static>> {
         (NodeKind::Session, Some(s)) => {
             let fc = insight::forecast(world, s);
             let mut v = vec![
-                head(s.project().to_uppercase(), t.hi),
+                head(if s.host.is_empty() { s.project().to_uppercase() } else { format!("{} · {}", s.project(), s.host).to_uppercase() }, t.hi),
                 kv("title", s.title.clone()),
                 kv("status", if s.alive { s.status.clone() } else { "ended".into() }),
                 kv("model", format!("{} · ctx {} of {}", short_model(&s.agents[0].model), fmt_n(fc.ctx), fmt_n(fc.limit))),
@@ -1543,7 +1547,7 @@ mod tests {
             concat!(
                 r#"{"type":"user","timestamp":"2026-10-16T10:00:00.000Z","cwd":"/tmp/demo","message":{"content":"hello"}}"#,
                 "\n",
-                r#"{"type":"assistant","timestamp":"2026-10-16T10:00:01.000Z","message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":10,"output_tokens":5},"content":[{"type":"tool_use","id":"t1","name":"mcp__claude_ai_Notion__notion-search","input":{"query":"x"}}]}}"#,
+                r#"{"type":"assistant","timestamp":"2026-10-16T10:00:01.000Z","message":{"id":"m1","model":"qwen3.8","usage":{"input_tokens":10,"output_tokens":5},"content":[{"type":"tool_use","id":"t1","name":"mcp__claude_ai_Notion__notion-search","input":{"query":"x"}}]}}"#,
                 "\n"
             ),
         )

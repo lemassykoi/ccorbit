@@ -1,18 +1,19 @@
-# The record format ccorbit reads (origin: Claude Code)
+# The record format ccorbit reads (origin: the upstream transcript format)
 
 `Session::ingest` speaks one record grammar. `--replay` plays transcript files and `--demo`
 fabricates them directly in this grammar; the live source (`src/opencode.rs`) translates opencode
 rows into these same records (see [OPENCODE_FORMAT.md](OPENCODE_FORMAT.md)). The grammar is kept
-verbatim from the upstream view of the Claude Code format, which `--replay` still reads.
+verbatim from the upstream transcript format its `--replay` files come in.
 
-None of this is a documented interface: it is what Claude Code 2.1 writes, observed in real
-files. When a reading looks wrong, check the files first (`--dump` prints what ccorbit understood).
-All paths are under `~/.claude` (`$CLAUDE_CONFIG_DIR` when set; `%USERPROFILE%\.claude` on Windows),
-for `--replay`; the live source ignores paths and reads the tables in `OPENCODE_FORMAT.md`.
+None of this is a documented interface: it is what the upstream monitor wrote, observed in real
+transcript files. When a reading looks wrong, check the files first (`--dump` prints what ccorbit understood).
+`--replay` opens a transcript file you point it at (the upstream stored them under `~/.claude`, its
+`$CLAUDE_CONFIG_DIR`, or the Windows equivalent); the live source ignores paths and reads the tables
+in [OPENCODE_FORMAT.md](OPENCODE_FORMAT.md).
 
 ## The registry: `sessions/<pid>.json`
 
-One file per running Claude Code process: `pid`, `sessionId`, `cwd`, `name` (`projects-63`),
+One file per running session process: `pid`, `sessionId`, `cwd`, `name` (`projects-63`),
 `status` (`idle`, `busy`, `shell`, a value containing `wait` when it waits for the person),
 `startedAt` (ms). A session is running while its process exists. The `.key` files beside them are
 never opened.
@@ -77,7 +78,7 @@ tools.
 
 ## Observed facts
 
-- Automatic compaction of `claude-opus-5-5` tops out near 968k tokens (a 1M window), but it often
+- Automatic compaction of a 1M-window model tops out near 968k tokens, but it often
   fires earlier, at sizes with no visible pattern (204k to 738k). Hence the ceiling reading uses
   the largest compaction seen, never a fixed number.
 - A session started in another folder than its transcript's is found by its id.

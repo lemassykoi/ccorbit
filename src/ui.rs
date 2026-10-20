@@ -344,20 +344,32 @@ fn draw(f: &mut Frame, app: &mut App, world: &World) {
     }
 }
 
-/// Display names: the project folder, plus the registry tag when two sessions share a folder.
+/// Display names: the project folder, plus the registry tag when two sessions share a folder *on
+/// the same machine*. Two boxes with the same folder are not a collision here — the host is shown
+/// as its own chip (see `host_chip`), so it must not also crowd the label.
 fn names(world: &World, order: &[usize]) -> HashMap<usize, String> {
-    let mut count: HashMap<&str, usize> = HashMap::new();
+    let mut count: HashMap<(String, String), usize> = HashMap::new();
     for &si in order {
-        *count.entry(world.sessions[si].project()).or_default() += 1;
+        let s = &world.sessions[si];
+        *count.entry((s.host.clone(), s.project().to_string())).or_default() += 1;
     }
     order
         .iter()
         .map(|&si| {
             let s = &world.sessions[si];
             let p = s.project();
-            (si, if count[p] > 1 { format!("{p}·{}", s.short_tag()) } else { p.to_string() })
+            let n = count[&(s.host.clone(), p.to_string())];
+            (si, if n > 1 { format!("{p}·{}", s.short_tag()) } else { p.to_string() })
         })
         .collect()
+}
+
+/// The machine a remote session came from, as a faint chip; empty for the local box.
+fn host_chip(s: &Session, t: &Theme) -> Vec<Span<'static>> {
+    if s.host.is_empty() {
+        return Vec::new();
+    }
+    vec![Span::styled(format!(" {} ", s.host), Style::new().fg(t.fg).bg(t.surface)), Span::raw(" ")]
 }
 
 /// Position on the wall, which picks the session's identity color.
@@ -374,7 +386,10 @@ fn collect_toasts(app: &mut App, world: &World) -> bool {
     let mut fresh = Vec::new();
     for &si in &order {
         let s = &world.sessions[si];
-        let name = names.get(&si).cloned().unwrap_or_default();
+        let mut name = names.get(&si).cloned().unwrap_or_default();
+        if !s.host.is_empty() {
+            name = format!("{name}·{}", s.host);
+        }
         let latest = s.feed.back().map_or(0, |f| f.at);
         let seen = match app.toast_seen.get(&s.id) {
             Some(&at) => at,
@@ -432,11 +447,12 @@ fn collect_toasts(app: &mut App, world: &World) -> bool {
         live.insert(key);
     }
     for c in insight::collisions(world) {
-        let key = format!("collide:{}", c.path);
+        let key = format!("collide:{}:{}", c.host, c.path);
         if app.warned.insert(key.clone()) && ready {
             let who: Vec<String> = c.sessions().iter().map(|si| names.get(si).cloned().unwrap_or_default()).collect();
             let file = crate::parse::file_name(&c.path).to_string();
-            fresh.push(Toast::new("✖", format!("collision · {file} · {}", who.join(" + ")), t.err));
+            let at = if c.host.is_empty() { String::new() } else { format!(" · {}", c.host) };
+            fresh.push(Toast::new("✖", format!("collision · {file}{at} · {}", who.join(" + ")), t.err));
         }
         live.insert(key);
     }
@@ -664,13 +680,14 @@ fn boot(f: &mut Frame, area: Rect, app: &App, world: &World) {
     let agents: usize = world.sessions.iter().map(|s| s.agents.len()).sum();
     let mcp: usize = world.sessions.iter().map(|s| s.mcp.len()).sum();
     let db = world.db_path().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(|| "storage".into());
+    let net = match (!world.hosts.list.is_empty(), !app.engines.list.is_empty()) {
+        (true, true) => "HOSTS + PULSE",
+        (true, false) => "HOSTS ON",
+        (false, true) => "ENGINE PULSE ON",
+        (false, false) => "NO NETWORK",
+    };
     let lines = [
-        format!(
-            "{} TERMINAL v{}  ·  READ-ONLY  ·  {}",
-            t.name.to_uppercase(),
-            env!("CARGO_PKG_VERSION"),
-            if app.engines.list.is_empty() { "NO NETWORK" } else { "ENGINE PULSE ON" }
-        ),
+        format!("{} TERMINAL v{}  ·  READ-ONLY  ·  {}", t.name.to_uppercase(), env!("CARGO_PKG_VERSION"), net),
         format!("> reading {db} .............. {live} live"),
         format!("> following parts .............. {agents} agents"),
         format!("> mcp connections seen ............... {mcp}"),
@@ -812,6 +829,10 @@ fn footer(f: &mut Frame, area: Rect, app: &App, world: &World) {
     for strip in app.engines.strips() {
         right.push(Span::styled(format!("{strip}  "), Style::new().fg(t.accent)));
     }
+    // The remote hosts the person listed with --hosts: one status line each.
+    for strip in world.hosts.strips() {
+        right.push(Span::styled(format!("{strip}  "), Style::new().fg(t.dim)));
+    }
     right.push(Span::styled(" ? ", Style::new().fg(t.bg).bg(t.accent)));
     right.push(Span::styled(" help  ", Style::new().fg(t.dim)));
     right.push(Span::styled(format!("{} ", t.name), Style::new().fg(t.faint)));
@@ -891,13 +912,12 @@ fn card(f: &mut Frame, rect: Rect, app: &App, world: &World, si: usize, k: usize
     } else {
         Span::styled(format!(" {} ", s.status.to_uppercase()), Style::new().fg(t.bg).bg(t.faint))
     };
-    let title = Line::from(vec![
-        Span::raw(" "),
-        dot,
-        Span::raw(" "),
-        Span::styled(clip(name, rect.width.saturating_sub(18) as usize), Style::new().fg(if s.alive { me } else { t.dim }).add_modifier(Modifier::BOLD)),
-        Span::raw(" "),
-    ]);
+    let mut title_spans = vec![Span::raw(" "), dot, Span::raw(" ")];
+    title_spans.extend(host_chip(s, t));
+    title_spans
+        .push(Span::styled(clip(name, rect.width.saturating_sub(18) as usize), Style::new().fg(if s.alive { me } else { t.dim }).add_modifier(Modifier::BOLD)));
+    title_spans.push(Span::raw(" "));
+    let title = Line::from(title_spans);
     let right = Line::from(vec![pill, Span::raw(" ")]);
     let inner = panel(f, rect, t, title, Some(right), selected || hovered || busy || needs, selected);
     let w = inner.width as usize;
@@ -1179,11 +1199,11 @@ fn tree(f: &mut Frame, area: Rect, app: &mut App, world: &World, s: &Session, ro
     let t = app.t();
     let cx = Ctx { t, now: world.now, frame: app.frame(), fx: app.fx, marks: Some(&ins.marks), world: Some(world) };
     let busy = s.busy();
-    let title = Line::from(vec![
-        Span::styled(" ▸ ", Style::new().fg(t.fg)),
-        Span::styled(s.project().to_string(), Style::new().fg(me).add_modifier(Modifier::BOLD)),
-        Span::styled(format!(" · {} ", clip(&s.title, 60)), Style::new().fg(t.dim)),
-    ]);
+    let mut title_spans = vec![Span::styled(" ▸ ", Style::new().fg(t.fg))];
+    title_spans.extend(host_chip(s, t));
+    title_spans.push(Span::styled(s.project().to_string(), Style::new().fg(me).add_modifier(Modifier::BOLD)));
+    title_spans.push(Span::styled(format!(" · {} ", clip(&s.title, 60)), Style::new().fg(t.dim)));
+    let title = Line::from(title_spans);
     let right = Line::from(Span::styled(
         format!(" {} · {} ", if s.alive { s.status.to_uppercase() } else { "ENDED".into() }, if app.follow { "FOLLOW" } else { "SCROLL" }),
         Style::new().fg(t.faint),
@@ -1782,7 +1802,11 @@ fn skyline(f: &mut Frame, area: Rect, app: &mut App, world: &World, order: &[usi
         let busy = s.busy();
         tower(f.buffer_mut(), x0, ground, height, t.towers[k % t.towers.len()], busy, s.alive, frame, k, t);
         let slot_x = x_start + k as u16 * TOWER_SLOT;
-        let name = clip(names.get(&si).map_or(s.project(), String::as_str), (TOWER_SLOT - 1) as usize);
+        let mut label = names.get(&si).map_or(s.project(), String::as_str).to_string();
+        if !s.host.is_empty() {
+            label = format!("{label}·{}", s.host);
+        }
+        let name = clip(&label, (TOWER_SLOT - 1) as usize);
         let style = if busy {
             Style::new().fg(t.hi).add_modifier(Modifier::BOLD)
         } else if s.alive {
@@ -2478,7 +2502,7 @@ pub fn dump(world: &mut World, opts: &Opts) -> String {
         let _ = writeln!(
             out,
             "== {} [{}] {} · {} · in {} · cache {} · out {}",
-            s.project(),
+            if s.host.is_empty() { s.project().to_string() } else { format!("{} · {}", s.project(), s.host) },
             if s.alive { s.status.as_str() } else { "ended" },
             s.name,
             s.title,

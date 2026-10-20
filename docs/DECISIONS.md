@@ -4,17 +4,18 @@ Why things are the way they are, including what was tried and rejected. Read thi
 proposing a change in the same area; add an entry when you make a choice someone could undo
 without knowing why.
 
-## The live source is opencode, not Claude Code (2026-10-19, fork)
+## The live source is opencode, not the upstream monitor (2026-10-19, fork)
 
 This fork runs on a machine whose sessions are `opencode` talking to locally served models; the
-Claude Code reader was dropped entirely (`--replace entirely`, the owner's word). The record
+upstream monitor's reader was dropped entirely (`--replace entirely`, the owner's word). The record
 grammar of `Session::ingest` stayed: the new source is a *translator* from opencode's storage
 rows to those records, so `model`, `insight`, `ui` and `hud` did not move and the golden screens
-survived (only the help screen's DATA line changed). Rejected: polling `opencode serve` over HTTP
-(breaks the zero-network promise, misses the TUI's own sessions, which share the database
-anyway), and a sidecar that rewrote rows into Claude-shaped files (a second writer to keep in
-step for no fidelity gain). The database is opened `READ_ONLY`; the replay reader and the demo
-still feed records directly, in the upstream grammar.
+survived (only the help screen's DATA line changed). Rejected then: polling `opencode serve` over
+HTTP as a live source (the zero-network promise), and a sidecar that rewrote rows into
+transcript-shaped files (a second writer to keep in step for no fidelity gain). The database is
+opened `READ_ONLY`; the replay reader and the demo still feed records directly, in the upstream grammar.
+*(The serve point is revisited and corrected under "Remote opencode hosts": a deliberately started
+serve does read the shared database — it was rejected for other reasons, not that one.)*
 
 ## rusqlite, the third dependency, and why the binary grew (2026-10-19, fork)
 
@@ -32,10 +33,104 @@ addresses, `http://` only, one short GET per engine per two seconds, replies cap
 only; the marked lines live in `src/engines.rs` and nowhere else, which the rule test enforces
 line by line. Sessions and readings never depend on it: with no `--engines` ccorbit is exactly
 the zero-network tool it was.
+- *(In part superseded 2026-10-19 by v0.4.0: all transport code — this client and the new `--export`
+  listener — moved into `src/net.rs`, so `src/engines.rs` no longer holds a socket of its own; it calls
+  `net::http_get`, as does the new `--hosts` poller. The engine pulse is no longer the only socket, but
+  it is still the only one the local-only tool ever opens, and the only socket file is now `src/net.rs`.
+  See "Remote opencode hosts" below.)*
+
+## Remote opencode hosts: the exporter, not the serve (2026-10-19, v0.4.0)
+
+The tool followed one machine's sessions; the user runs several opencodes across the LAN and wants
+one central ccorbit to show them all at full fidelity. This **adds a network surface to the
+product's main feature**, which is a bigger deal than the footer pulse, so the founding promises
+("reads files, never a command, network only the opt-in engine pulse") are renegotiated here rather
+than quietly bent.
+
+**Decided: B — ccorbit is its own agent.** `ccorbit --export <ADDR>` on each host runs the *local*
+reader (`src/opencode.rs`) against that box's `opencode.db` and publishes only the translated
+**summary records** it already emits, plus a per-session status header, over one token-gated
+`http://` endpoint. The central ccorbit (`--hosts <FILE>`) polls those and feeds the records through
+the same `Session::ingest` that `--replay` uses. Bodies never leave the box: the wire carries the
+grammar ccorbit already keeps in memory (`map_tool` drops `oldString`/`newString`/`content`/`prompt`;
+reasoning is timing-only; text is clipped to its first line), so the one-line-summary promise holds
+*structurally*, not by a filter added on the server.
+
+**A (`opencode serve` over HTTP) was seriously reconsidered, not dismissed.** The v0.4 design note
+assumed a serve "may only expose its own instances and be dead on arrival" for TUI sessions. That is
+**false**, and was checked against the live box before choosing: the `opencode serve` the OTG runs on
+`127.0.0.1:4097` lists the **shared** `opencode.db` — it returned the very session this decision was
+written in, and the build session that wrote the design note, neither of which it owns — and its
+`time.updated` matched the database byte-for-byte (live). `GET /session` is even **summary-only**
+(`id, parentID, directory, title, model.id, cost, tokens{…}, time{…}, summary{additions,deletions,files}`,
+default page 100, `?limit=` works; the serve listed 167 of the database's 202). A was still rejected
+for two reasons that survive that finding:
+
+1. **A fidelity/privacy fork.** The body-free `/session` list can drive only the wall's headline
+   numbers. The session tree, the brainwave and the code city need `GET /session/:id/message`, which
+   returns message parts verbatim — the `text` prompt, the `reasoning` chain of thought, and tool
+   inputs. So A either ships bodies across the LAN (breaking the summary-only promise on the main
+   feature) or shows a wall of cards that cannot open.
+2. **A needs a second source-side translator.** The serve hands back message-shaped `{info, parts[]}`,
+   not the `part` rows with `state.status` transitions that every hard-won quirk in `opencode.rs` is
+   written against (in-place tool-row updates, empty-input first sight, `metadata.exit`, a question
+   staying `running`, children by `parent_id`/`state.metadata.sessionId`). A would reuse the *model*,
+   not the ~1000-line reader — a second source to build, test and keep in step, for less fidelity.
+
+**Rejected outright:** **C — ssh + remote `sqlite3`.** The program never runs a command; an ssh
+client is a command, and a remote shell is the widest surface this tool could open. **D — an
+NFS/SMB-mounted `opencode.db`.** SQLite WAL over a network filesystem is a corruption footgun and a
+reader can see torn state; the read-only promise depends on WAL behaving, which it does not across a
+mount. **E — hybrid (B everywhere, A opportunistically where a public serve exists).** Rejected for
+v0.4: two transport paths mean two test suites and two failure modes for one feature. The verified
+serve behaviour above is recorded (OPENCODE_FORMAT.md) so E can be revisited honestly later if a body-
+free serve message API ever appears.
+
+**Design choices that defuse the traps:**
+- **Liveness is decided on the host, the verdict shipped.** BLIP/DEAD/ACTIVE_WINDOW run where the
+  database and the correct clock are; the central only displays `status`/`alive`/`archived`/`last_act`.
+  NTP-skewed boxes can no longer flip busy/idle — skew then only nudges an "x ago" label. The envelope
+  carries the host's `now_ms`; the central derives `offset = host_now − arrival_local` and shifts
+  record timestamps before ingest.
+- **Identity is host-qualified at the source** (`host:ses_…`). Because the HUD already keys nodes on
+  `s.id` and the wall keys `toast_seen`/`waiting`/`warned`/`compacted`/`heights`/selection on `s.id`,
+  qualifying it once in the poller makes all of them correct for free. Cards and titles gain a host
+  chip; `short_tag()` is not a sufficient disambiguator (77 sessions share `/home/clement` on one box,
+  and three boxes share a username).
+- **File and collision keys are host-qualified.** `insight::collisions` and the code city group by the
+  raw `path`; two hosts editing `/home/clement/app.ts` are different files and must not read as a
+  collision or merge into one building.
+- **A dead host degrades alone.** Reuse the shared `net::http_get` (700 ms connect / 1.5 s read),
+  back off on failure (1→2→5→10 s), mark the host `stale` with its age, drop its cards after a policy
+  timeout; never block the other hosts or the local source. `.49` boots Windows and goes absent; this
+  is the normal case the UI must absorb.
+- **Realtime.** The exporter inherits the reader's 1 s database tick; the central polls each host every
+  1 s (the footer pulse's 2 s cadence is the throttle on failure, not on the happy path). The 3 s
+  streamed-text settle (`STREAM_STABLE`) is the floor — identical to local — so remote matches local
+  plus one poll and one LAN hop. A push channel (long-poll/SSE) is deliberately deferred to keep one
+  protocol for v0.4.
+- **Version skew is loud, not silent.** The envelope carries a wire `format` version *and* the host's
+  opencode version; the central refuses a mismatch rather than mis-parsing. This matters for `.51`,
+  which runs **opencode v2** (a different major with no proven-read schema): it is deferred out of
+  v0.4.0 rather than half-supported.
+
+**The promise, restated honestly.** ccorbit still never writes a file and never runs a command. It now
+opens a socket for **three** opt-in surfaces, but *all* transport code — the HTTP client and the export
+listener alike — is confined to a **single** file, `src/net.rs`, so the promise stays checkable line by
+line and by file. The shared client `fn http_get` backs both `--engines` and the `--hosts` poller
+(`src/engines.rs` and `src/hosts.rs` hold no socket themselves; they call `net::http_get`), and
+`fn serve` is the `TcpListener` the `--export` mode runs through (the export *logic* stays in
+`src/opencode.rs`). `tests/rules.rs` allows a `harness: allow network` marker in `src/net.rs` and
+nowhere else. Without `--hosts`/`--export` ccorbit is exactly the v0.3.0 tool. `http://` only, on a
+LAN-trust assumption stated like the engine pulse's; one shared key file
+(`~/.config/ccorbit/host-key`) gates the export endpoint. No new dependency: the hand-rolled transport is
+shared and std-only, so the binary stays on `ratatui`, `serde_json`, `rusqlite`. The "about 3 MB / 8 ms
+frame" claims are re-measured under the extra hosts rather than inherited, and the per-host session cap
+is lowered if they slip.
 
 ## Read-only, by design (2026-10-16)
 
-ccorbit reads the files Claude Code already writes: no hook, no settings change, no command, no
+ccorbit reads the files opencode already writes: no hook, no settings change, no command, no
 network. Hooks would give richer events, but they change the user's setup and run code on every
 session. Everything shown had to be found in the files; when something is not there (network
 bytes, the context window size), ccorbit says so instead of guessing silently.
@@ -114,9 +209,11 @@ exception, and `tests/rules.rs` checks it without one.
 
 ## Windows: tested by CI, not yet on real sessions (2026-10-17)
 
-The Windows build checks processes with `OpenProcess`/`GetExitCodeProcess`, finds `.claude` under
-`%USERPROFILE%`, and reads paths with `\`. CI builds and tests it, but it has not been run against
-real Claude Code sessions on Windows; the README says so.
+The Windows build reads opencode's storage on Windows and paths with `\`. CI builds and tests it,
+but it has not been run against real opencode sessions on Windows; the README says so. (An earlier
+upstream version used the Windows process API to find the owning session by pid under `%USERPROFILE%`;
+that went away with the process-liveness check — see the entry above, and the live source now being
+opencode's database.)
 
 ## Golden screens: exact text, tolerant dots (2026-10-17)
 

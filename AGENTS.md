@@ -6,11 +6,15 @@ Rust, three dependencies, read-only. This file is the map; the details live in `
 
 ## Promises you must not break
 
-- The program never writes a file and never runs a command; it opens a socket only for the
-  opt-in `--engines` read-only pulse, in `src/engines.rs`.
+- The program never writes a file and never runs a command. It opens a socket only where the person
+  opts in: the `--engines` pulse, the `--hosts` poller of other machines' exporters, and the `--export`
+  listener that publishes this machine's summaries. *All* transport code — the HTTP client and the
+  `TcpListener` — lives in one file, `src/net.rs`; `engines.rs`, `hosts.rs` and `opencode.rs` call it and
+  hold no socket themselves. Marker-gated in `tests/rules.rs`; passed none of those flags, ccorbit is
+  exactly the zero-network tool it was.
 - The live source opens opencode's database `READ_ONLY` and never takes a write lock.
 - It keeps summaries, counts and times, never message bodies, reasoning text, file contents or edited text.
-- The data layer (`source`, `model`, `opencode`, `engines`, `parse`, `insight`, ...) never draws; `ui` and `hud` do.
+- The data layer (`source`, `model`, `opencode`, `engines`, `hosts`, `net`, `parse`, `insight`, ...) never draws; `ui` and `hud` do.
 - Three runtime dependencies; a frame of the hologram well under 8 ms; a binary under 3.8 MB.
 
 Each promise and the check that enforces it: [docs/INVARIANTS.md](docs/INVARIANTS.md).

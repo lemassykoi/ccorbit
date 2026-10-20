@@ -1,10 +1,10 @@
-▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$343/h                activity ▄▄▅▂▅▇▇▇█▂▇▇▇█▇▇▄▅▇▅▄▇▄·
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$474/h                activity ▄▄▅▂▅▇▇▇█▂▇▇▇█▇▇▄▅▇▅▄▇▄·
 ╔ ⠦ webapp·12 ═════════════════════════════════ BUSY  ╗ ╭ ⠦ webapp·47 ───────────────────────────────── BUSY  ╮ ╭ ● api ─────────────────────────────────────── IDLE  ╮
 ║Checkout redesign                                    ║▌│Server-side rendering                                │▌│Rate limiter per tenant                              │▌
 ║⠦ model      thinking or writing the next step   1.3s║▌│⠦ model      thinking or writing the next step   2.1s│▌│✓ Read …/api/main.go                          13s ago│▌
 ║✖ checkout.tsx  △ on pace · ETA 3m29s  ◆ 3 running of║▌│✖ checkout.tsx  ◆ 1 agent  ⇄ github, linear          │▌│◆ 2 agents  ✦ 1 skill  ⇄ github, linear              │▌
 ║⇡  56k/s ⇣  422/s ·▸····▸····▸····▸····▸·· ██░░░░ 36%║▌│⇡  32k/s ⇣   49/s ·▸····▸····▸····▸····▸·· ███░░░ 50%│▌│⇡  62k/s ⇣   96/s ·▸····▸····▸····▸····▸·· ██████ 96%│▌
-║⠏⠳⠤⠞⠳⠤⠴⠛⢦⡴⠋⢳⣠⠖⠲⣄⡖⠛⢦⡴⠒⢦⣠⠞⠳⣤⠞⠓⣆⡴⠛⠦⠤ ◉ 96% ≈$10 opus-5-5║▌│⠴⠛⠦⣤⠞⠳⣤⠞⠓⢦⡴⠛⢦⡴⠒⠲⣤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠞⠳⣄⡼⠙⠦⠤ ◉ 95% ≈$8 opus-5-5│▌│⠟⢦⡴⠚⠳⠤⠞⠳⣄⡴⠛⢦⡴⠛⠲⣤⠞⠳⣄⡞⠙⢦⡴⠋⢧⣠⠏⠳⣤⠞⠙⠦⠤ ◉ 96% ≈$14 opus-5-5│▌
+║⠏⢳⣠⠖⠲⣄⡖⠛⢦⡴⠒⢦⣠⠞⠳⣤⠞⠓⣆⡴⠛⠦⠤ ◉ 96% ≈$15 qwen3.8-flash-next║▌│⠴⠛⢦⡴⠒⠲⣤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠞⠳⣄⡼⠙⠦⠤ ◉ 95% ≈$9 qwen3.8-flash-next│▌│⠟⢦⡴⠛⠲⣤⠞⠳⣄⡞⠙⢦⡴⠋⢧⣠⠏⠳⣤⠞⠙⠦⠤ ◉ 96% ≈$17 qwen3.8-flash-next│▌
 ║› run the tests and fix what breaks                  ║▌│› cache rendered pages for a minute                  │▌│› make the limiter per tenant                        │▌
 ╚═════════════════════════════════════════════════════╝▌╰─────────────────────────────────────────────────────╯▌╰─────────────────────────────────────────────────────╯▌
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
@@ -13,7 +13,7 @@
                                                         │⠦ linear get_issue · ENG-412                     1.9s│▌
                                                         │◆ 1 agent  ⇄ github, linear                          │▌
                                                         │⇡  28k/s ⇣   26/s ·▸····▸····▸····▸····▸·· █░░░░░ 21%│▌
-                                                        │⠤⠤⠖⠻⣄⡴⠒⢦⡴⠒⢲⣠⠞⠳⣄⡴⠒⢦⡴⠒⢲⣠⠞⠳⣄⡞⠙⣆⡴⠛⠦⠤ ◉ 95% ≈$2 sonnet-5-5│▌
+                                                        │⢤⡤⠏⠧⠤⠖⠻⣄⡴⠒⢦⡴⠒⢲⣠⠞⠳⣄⡴⠒⢦⡴⠒⢲⣠⠞⠳⣄⡞⠙⣆⡴⠛⠦⠤ ◉ 95% ≈$6 qwen3.8│▌
                                                         │› rank exact title matches first                     │▌
                                                         ╰─────────────────────────────────────────────────────╯▌
                                                          ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘

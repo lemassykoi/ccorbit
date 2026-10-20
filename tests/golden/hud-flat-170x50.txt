@@ -1,11 +1,11 @@
-▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$343/h                activity ▄▄▅▂▅▇▇▇█▂▇▇▇█▇▇▄▅▇▅▄▇▄·
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$474/h                activity ▄▄▅▂▅▇▇▇█▂▇▇▇█▇▇▄▅▇▅▄▇▄·
 ┏━━                                                                                                                                                                    ━━┓
 ┃ ◤ SYSTEM ACTIVE                                                                                                                                                        ┃
   sessions 4 live · 3 busy
   agents   3 running
   uplink   ⇡ 180k/s                                                     ⢀           ⢸           ⢀
   downlink ⇣ 593/s                                          ⠠⡀      ⢀ ⢀ ⠈⠄ ⠄ ⠄ ⠂ ⠂ ⠂ ⠂ ⠐ ⠐ ⠠ ⠠ ⠠⠈⢀ ⢀        ⡠
-  burn     ≈$343/h API-equiv.                   ⠠⣀         ⡀ ⠅⠐ ⠐ ⠈                                  ⠈ ⠈ ⠐ ⠠⠁⢀ ⢀       ⢀⡠
+  burn     ≈$474/h API-equiv.                   ⠠⣀         ⡀ ⠅⠐ ⠐ ⠈                                  ⠈ ⠈ ⠐ ⠠⠁⢀ ⢀       ⢀⡠
   view     flat · 1.0×                           ⠈⠒⢀ ⠄ ⠂ ⠁                                                       ⠈ ⠂ ⡀⠐⠊
                                               ⡀ ⠂⠈                                                                     ⠁⠐ ⠠
                                        ⠈⠓⡀ ⠂⠈                                    ⡀      ⡀                                   ⠁⠐ ⠄⠐⠋ ⣀⡀

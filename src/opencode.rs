@@ -9,12 +9,14 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
 use crate::model::Session;
+use crate::net;
 use crate::parse;
 use crate::time::fmt_iso;
 
@@ -39,6 +41,161 @@ const BLIP: i64 = 15_000;
 /// progress: a tool running past it is shown idle and its step closed as lost (it is rare that
 /// a legitimate call runs silent this long, and the card heals itself on the next row).
 const DEAD: i64 = 10 * 60_000;
+/// The export wire format version. The central refuses a host that speaks another version rather
+/// than mis-parsing it (opencode's own version travels alongside). Bumping this is a real break.
+pub const EXPORT_FORMAT: u32 = 1;
+/// The opencode version this reader is written and tested against (README). A host that says it
+/// read a different one is refused rather than guessed at — the storage schema is undocumented and
+/// moves, so a silent misread is worse than a clear error strip.
+pub const OPENCODE_SEEN: &str = "1.19.0";
+/// The route the exporter answers on, and the same the poller asks for.
+const EXPORT_ROUTE: &str = "/export";
+/// Never emit more than this many operations for one session; past it the log is rebuilt from the
+/// head (a session that lives longer than this is shown from its recent history, like the wall's
+/// own item trim). Generous: a 20-minute-active session rarely reaches a thousand.
+const MAX_OPS: usize = 8000;
+
+/// One step of the reader's work on a session, recorded so a remote ccorbit can replay it onto its
+/// own `Session` and land in exactly the state the local reader would. These are the *only*
+/// mutations `Session` accepts from across the wire, and every one of them carries summary-only
+/// data: `Ingest` lines are the transcript records (`map_tool` already dropped bodies), `SetInput`
+/// inputs are the cleaned tool inputs. Nothing here can hold a message body, reasoning text or an
+/// edit string.
+#[derive(Clone)]
+pub enum Op {
+    /// Register a subagent at a fixed index, in the order the reader discovered the children.
+    AddAgent { agent: usize, id: String, kind: String, description: String, parent_tool: Option<String> },
+    /// Feed one transcript record to `Session::ingest`.
+    Ingest { agent: usize, line: String },
+    /// Refresh a running step's derived fields when opencode fills the tool input late.
+    SetInput { id: String, input: Value },
+    /// A `task` call closing also closes the child it launched.
+    AgentDone { agent: usize },
+    /// The liveness verdict the host computed, only when it changes (busy/idle). `at` is the host's
+    /// clock at the verdict, so a remote idle session abandons its dangling calls the same way.
+    Status { status: String, at: i64 },
+}
+
+impl Op {
+    fn to_json(&self) -> Value {
+        match self {
+            Op::AddAgent { agent, id, kind, description, parent_tool } => {
+                json!({"op": "add", "agent": agent, "id": id, "kind": kind, "desc": description, "parent": parent_tool})
+            }
+            Op::Ingest { agent, line } => json!({"op": "ingest", "agent": agent, "line": line}),
+            Op::SetInput { id, input } => json!({"op": "set", "id": id, "input": input}),
+            Op::AgentDone { agent } => json!({"op": "done", "agent": agent}),
+            Op::Status { status, at } => json!({"op": "status", "status": status, "at": at}),
+        }
+    }
+
+    fn from_json(v: &Value) -> Option<Op> {
+        match v.get("op").and_then(Value::as_str)? {
+            "add" => Some(Op::AddAgent {
+                agent: v.get("agent").and_then(Value::as_u64)? as usize,
+                id: v.get("id").and_then(Value::as_str)?.to_string(),
+                kind: v.get("kind").and_then(Value::as_str)?.to_string(),
+                description: v.get("desc").and_then(Value::as_str)?.to_string(),
+                parent_tool: v.get("parent").and_then(Value::as_str).map(str::to_string),
+            }),
+            "ingest" => Some(Op::Ingest { agent: v.get("agent").and_then(Value::as_u64)? as usize, line: v.get("line").and_then(Value::as_str)?.to_string() }),
+            "set" => Some(Op::SetInput { id: v.get("id").and_then(Value::as_str)?.to_string(), input: v.get("input").cloned().unwrap_or(Value::Null) }),
+            "done" => Some(Op::AgentDone { agent: v.get("agent").and_then(Value::as_u64)? as usize }),
+            "status" => Some(Op::Status { status: v.get("status").and_then(Value::as_str)?.to_string(), at: v.get("at").and_then(Value::as_i64)? }),
+            _ => None,
+        }
+    }
+}
+
+/// One session as the host publishes it: the fields the wall reads directly, plus the operation
+/// log (the child agents and steps are inside the log, since children live as agents of the root).
+pub struct HostSession {
+    pub id: String,
+    pub directory: String,
+    pub title: String,
+    pub model: String,
+    pub children: Vec<String>,
+    pub count: usize,
+    pub ops: Vec<Op>,
+}
+
+impl HostSession {
+    fn to_json(&self) -> Value {
+        json!({
+            "id": self.id, "directory": self.directory, "title": self.title, "model": self.model,
+            "children": self.children, "count": self.count, "ops": self.ops.iter().map(Op::to_json).collect::<Vec<_>>(),
+        })
+    }
+
+    fn from_json(v: &Value) -> Option<HostSession> {
+        Some(HostSession {
+            id: v.get("id").and_then(Value::as_str)?.to_string(),
+            directory: v.get("directory").and_then(Value::as_str).unwrap_or("").to_string(),
+            title: v.get("title").and_then(Value::as_str).unwrap_or("").to_string(),
+            model: v.get("model").and_then(Value::as_str).unwrap_or("").to_string(),
+            children: v.get("children").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())?,
+            count: v.get("count").and_then(Value::as_u64).unwrap_or(0) as usize,
+            ops: v.get("ops").and_then(Value::as_array).map(|a| a.iter().filter_map(Op::from_json).collect())?,
+        })
+    }
+}
+
+/// The whole export document one host answers with on `GET /export`.
+pub struct HostEnvelope {
+    pub format: u32,
+    pub opencode: String,
+    pub host: String,
+    pub now: i64,
+    pub sessions: Vec<HostSession>,
+}
+
+impl HostEnvelope {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "format": self.format, "opencode": self.opencode, "host": self.host, "now": self.now,
+            "sessions": self.sessions.iter().map(HostSession::to_json).collect::<Vec<_>>(),
+        })
+    }
+
+    pub fn from_json(v: &Value) -> Option<HostEnvelope> {
+        Some(HostEnvelope {
+            format: v.get("format").and_then(Value::as_u64)? as u32,
+            opencode: v.get("opencode").and_then(Value::as_str).unwrap_or("").to_string(),
+            host: v.get("host").and_then(Value::as_str).unwrap_or("").to_string(),
+            now: v.get("now").and_then(Value::as_i64).unwrap_or(0),
+            sessions: v.get("sessions").and_then(Value::as_array)?.iter().filter_map(HostSession::from_json).collect(),
+        })
+    }
+}
+
+/// Replay a host's operations onto a `Session`, driving exactly the `Session` methods the local
+/// reader would. The caller has already created or reused the `Session` (host-qualified id, `cwd`,
+/// `title`, `alive`); this fills its agents, steps and liveness. Op order is preserved from the
+/// host, so a child's `AddAgent` precedes its `Ingest` lines and the agent indices line up.
+pub fn apply_ops(s: &mut Session, ops: &[Op]) {
+    for op in ops {
+        match op {
+            Op::AddAgent { id, kind, description, parent_tool, .. } => {
+                s.add_agent(id, kind, description, parent_tool.clone());
+            }
+            Op::Ingest { agent, line } => s.ingest(*agent, line),
+            Op::SetInput { id, input } => s.set_step_input(id, input),
+            Op::AgentDone { agent } => {
+                if let Some(ag) = s.agents.get_mut(*agent) {
+                    ag.done = true;
+                }
+            }
+            Op::Status { status, at } => {
+                s.status = status.clone();
+                // A session the host calls idle had its dangling calls closed locally; mirror that
+                // so a stray open step cannot make the card read busy on the central too.
+                if status != "busy" {
+                    s.abandon_running(*at);
+                }
+            }
+        }
+    }
+}
 
 pub struct Open {
     pub db_path: PathBuf,
@@ -48,6 +205,10 @@ pub struct Open {
     lanes: HashMap<String, Lane>,
     /// MCP server names: a tool called `{server}_{tool}` is an MCP call, not a built-in.
     servers: Vec<String>,
+    /// When true (`--export`), every operation the reader performs is also appended to `op_log`,
+    /// so a central ccorbit can replay it. The local wall never sets this.
+    exporting: bool,
+    op_log: HashMap<String, Vec<Op>>,
 }
 
 /// What has been read and emitted for one opencode session.
@@ -75,9 +236,60 @@ struct Lane {
 }
 
 impl Open {
-    /// Starts following a database; nothing is read until the first `tick`.
+    /// Starts following a database for the local wall; nothing is read until the first `tick`.
     pub fn watch(db_path: PathBuf) -> Open {
-        Open { db_path, conn: None, last_poll: None, lanes: HashMap::new(), servers: mcp_servers() }
+        Open { db_path, conn: None, last_poll: None, lanes: HashMap::new(), servers: mcp_servers(), exporting: false, op_log: HashMap::new() }
+    }
+
+    /// Starts a reader in export mode (`--export`): `tick` records every operation into `op_log` so
+    /// `envelope` can hand it to a central ccorbit. It reads the same database the same way.
+    fn watch_export(db_path: PathBuf) -> Open {
+        Open { db_path, conn: None, last_poll: None, lanes: HashMap::new(), servers: mcp_servers(), exporting: true, op_log: HashMap::new() }
+    }
+
+    /// Run the `--export` endpoint: follow `db_path`, and answer one `GET /export` with the current
+    /// operation logs, gated by `token`. The accept loop lives in `net::serve` (the only socket);
+    /// this holds the reader and the throwaway session state it computes liveness from. `host_name`
+    /// labels the document (the central shows it as the host chip). Returns only on a bind failure.
+    pub fn export_serve(db_path: PathBuf, bind: &str, token: Option<&str>, host_name: String) -> Result<(), String> {
+        if token.is_none() {
+            return Err("export refuses to serve without a token (set ~/.config/ccorbit/host-key)".to_string());
+        }
+        let mut oc = Open::watch_export(db_path);
+        let mut sessions: Vec<Session> = Vec::new();
+        let stop = AtomicBool::new(false);
+        net::serve(bind, &stop, |req| {
+            if req.path != EXPORT_ROUTE || req.token.as_deref() != token {
+                return (if req.path == EXPORT_ROUTE { 401 } else { 404 }, json!({"error": "unauthorized"}).to_string());
+            }
+            let now = crate::time::now_ms();
+            oc.tick(&mut sessions, now);
+            let env = oc.envelope(&sessions, now, &host_name);
+            (200, env.to_json().to_string())
+        })
+    }
+
+    /// Build the export document from the current reader + session state. Only roots are listed;
+    /// their children ride inside as `AddAgent` operations. A session that fell out of the active
+    /// window (and so of `sessions`) simply is not here — the central drops what is absent.
+    fn envelope(&self, sessions: &[Session], now: i64, host_name: &str) -> HostEnvelope {
+        let sessions = sessions
+            .iter()
+            .filter(|s| s.alive)
+            .map(|s| {
+                let lane = self.lanes.get(&s.id);
+                HostSession {
+                    id: s.id.clone(),
+                    directory: s.cwd.clone(),
+                    title: s.title.clone(),
+                    model: s.agents.first().map(|a| a.model.clone()).unwrap_or_default(),
+                    children: lane.map(|l| l.children.keys().cloned().collect()).unwrap_or_default(),
+                    count: self.op_log.get(&s.id).map_or(0, Vec::len),
+                    ops: self.op_log.get(&s.id).cloned().unwrap_or_default(),
+                }
+            })
+            .collect();
+        HostEnvelope { format: EXPORT_FORMAT, opencode: OPENCODE_SEEN.to_string(), host: host_name.to_string(), now, sessions }
     }
 
     /// Reads whatever is new. Returns whether anything changed.
@@ -139,8 +351,13 @@ impl Open {
         let roots: Vec<&(String, Option<String>, String, String, String)> = rows.iter().filter(|(_, parent, ..)| parent.is_none()).collect();
         let root_ids: Vec<&str> = roots.iter().map(|(id, ..)| id.as_str()).collect();
 
-        // Sessions that fell out of the window go, and with them their lanes.
+        // Sessions that fell out of the window go, and with them their lanes. Remote sessions
+        // (host-qualified ids, which contain a ':') are the hosts poller's business, never this
+        // reader's, so they are left alone here.
         sessions.retain(|s| {
+            if s.id.contains(':') {
+                return true;
+            }
             let keep = active.contains_key(s.id.as_str());
             if !keep {
                 self.lanes.remove(&s.id);
@@ -179,7 +396,10 @@ impl Open {
             if lane.model.is_empty() {
                 lane.model = model.clone();
             }
-            changed |= read_session(conn, &mut sessions[si], id, 0, &mut lane, now, &self.servers)?;
+            let mut log: Vec<Op> = if self.exporting { self.op_log.remove(id).unwrap_or_default() } else { Vec::new() };
+            let (rc, r) = read_session(conn, &mut sessions[si], id, 0, &mut lane, now, &self.servers, self.exporting)?;
+            changed |= rc;
+            log.extend(r);
 
             // Child sessions run as agents of their root, hung under the task call that launched them.
             let mut kids: Vec<String> = Vec::new();
@@ -195,14 +415,19 @@ impl Open {
                     Some(&a) => (a, self.lanes.remove(&kid).unwrap_or_default()),
                     None => {
                         let (kind, description, parent_tool) = task_origin(conn, id, &kid);
-                        let a = sessions[si].add_agent(&kid, &kind, &description, parent_tool);
+                        let a = sessions[si].add_agent(&kid, &kind, &description, parent_tool.clone());
+                        if self.exporting {
+                            log.push(Op::AddAgent { agent: a, id: kid.clone(), kind: kind.clone(), description: description.clone(), parent_tool });
+                        }
                         (a, self.lanes.remove(&kid).unwrap_or_default())
                     }
                 };
                 if klane.model.is_empty() {
                     klane.model = session_model(conn, &kid).unwrap_or_default();
                 }
-                changed |= read_session(conn, &mut sessions[si], &kid, agent, &mut klane, now, &self.servers)?;
+                let (crc, c) = read_session(conn, &mut sessions[si], &kid, agent, &mut klane, now, &self.servers, self.exporting)?;
+                changed |= crc;
+                log.extend(c);
                 lane.children.insert(kid.clone(), agent);
                 self.lanes.insert(kid, klane);
             }
@@ -227,18 +452,40 @@ impl Open {
             let status = if working { "busy" } else { "idle" };
             if sessions[si].status != status {
                 sessions[si].status = status.to_string();
+                if self.exporting {
+                    log.push(Op::Status { status: status.to_string(), at: now });
+                }
                 changed = true;
             }
             self.lanes.insert(id.clone(), lane);
+            if self.exporting {
+                if log.len() > MAX_OPS {
+                    log.drain(..log.len() - MAX_OPS);
+                }
+                self.op_log.insert(id.clone(), log);
+            }
         }
         Ok(changed)
     }
 }
 
 /// Messages and parts of one opencode session (`sid`), emitted as records into the agent `a` of
-/// `s` (the root session the child, if any, belongs to).
-fn read_session(conn: &Connection, s: &mut Session, sid: &str, a: usize, lane: &mut Lane, now: i64, servers: &[String]) -> rusqlite::Result<bool> {
+/// `s` (the root session the child, if any, belongs to). With `rec` it also returns the operations
+/// it performed on `s`, so `--export` can replay them on a central ccorbit; the local wall passes
+/// `rec = false` and gets an empty vector (no records are cloned it will not use).
+#[allow(clippy::too_many_arguments)] // a row-by-row reader: conn, the session, its id, agent, cursor, clock, MCP names, record flag
+fn read_session(
+    conn: &Connection,
+    s: &mut Session,
+    sid: &str,
+    a: usize,
+    lane: &mut Lane,
+    now: i64,
+    servers: &[String],
+    rec: bool,
+) -> rusqlite::Result<(bool, Vec<Op>)> {
     let mut changed = false;
+    let mut ops: Vec<Op> = Vec::new();
 
     // New messages: role decides how text parts read; completion times let us close calls the
     // turn abandoned; their updates are part of the session's heartbeat.
@@ -303,25 +550,38 @@ fn read_session(conn: &Connection, s: &mut Session, sid: &str, a: usize, lane: &
                 if first {
                     let line = tool_use_record(&v, &fmt_iso(tc), &msg_id, servers);
                     s.ingest(a, &line);
+                    if rec {
+                        ops.push(Op::Ingest { agent: a, line });
+                    }
                     changed = true;
                 }
                 // opencode fills the input (the command, the path) a moment after creating the
                 // row, and a fast call jumps straight to completed between two polls: refresh
                 // the step on any advance of the row, not only while it is still running.
                 if !first && tu != seen_tu {
+                    let id = call_step_id(&v, &msg_id);
                     let (_, clean) = map_tool(tool_of(&v), &v["state"]["input"], servers);
-                    s.set_step_input(&call_step_id(&v, &msg_id), &clean);
+                    s.set_step_input(&id, &clean);
+                    if rec {
+                        ops.push(Op::SetInput { id, input: clean });
+                    }
                     changed = true;
                 }
                 if done && (first || seen_state != state_key) {
                     let line = tool_result_record(&v, &fmt_iso(tu), &status, &msg_id);
                     s.ingest(a, &line);
+                    if rec {
+                        ops.push(Op::Ingest { agent: a, line });
+                    }
                     // The task tool closing also closes the child it launched.
                     if tool_of(&v) == "task"
                         && let Some(kid) = v["state"]["metadata"]["sessionId"].as_str()
                         && let Some(&ag) = lane.children.get(kid)
                     {
                         s.agents[ag].done = true;
+                        if rec {
+                            ops.push(Op::AgentDone { agent: ag });
+                        }
                     }
                     changed = true;
                 } else if !done && lane.msg_done.contains_key(&msg_id) {
@@ -330,7 +590,11 @@ fn read_session(conn: &Connection, s: &mut Session, sid: &str, a: usize, lane: &
                     let lost_at = lane.msg_done[&msg_id];
                     let gone =
                         json!({"callID": v["callID"], "tool": tool_of(&v), "state": {"status": "completed", "output": "no result: the turn ended without it"}});
-                    s.ingest(a, &tool_result_record(&gone, &fmt_iso(lost_at), "completed", &msg_id));
+                    let line = tool_result_record(&gone, &fmt_iso(lost_at), "completed", &msg_id);
+                    s.ingest(a, &line);
+                    if rec {
+                        ops.push(Op::Ingest { agent: a, line });
+                    }
                     changed = true;
                 }
                 {
@@ -348,6 +612,9 @@ fn read_session(conn: &Connection, s: &mut Session, sid: &str, a: usize, lane: &
                     json!({"type":"assistant","timestamp":fmt_iso(tu),"message":{"id":format!("{msg_id}-{rowid}"),"model":model,"usage":usage,"content":[]}})
                         .to_string();
                 s.ingest(a, &line);
+                if rec {
+                    ops.push(Op::Ingest { agent: a, line });
+                }
                 {
                     lane.part_upd = lane.part_upd.max(tu);
                     lane.emitted.insert(rowid, (state_key, tu));
@@ -362,12 +629,19 @@ fn read_session(conn: &Connection, s: &mut Session, sid: &str, a: usize, lane: &
                 if !seen_state.is_empty() || !(tu.saturating_add(STREAM_STABLE) <= now || user_prompt || turn_closed) {
                     continue;
                 }
+                // A streamed text row is kept only as its first line — clipped here, at the source,
+                // so the extra lines never reach the model *or* the `--export` wire (the local
+                // reader used to rely on `ingest` to clip; the wire must not carry the tail).
+                let body = parse::clip(parse::first_line(v.get("text").and_then(Value::as_str).unwrap_or("")), 300);
                 let line = match kind {
                     "reasoning" => json!({"type":"assistant","timestamp":fmt_iso(tu),"message":{"id":format!("{msg_id}-{rowid}"),"model":model,"content":[{"type":"thinking"}]}}).to_string(),
-                    _ if user_prompt => json!({"type":"user","timestamp":fmt_iso(tc),"message":{"content":v.get("text").and_then(Value::as_str).unwrap_or("")}}).to_string(),
-                    _ => json!({"type":"assistant","timestamp":fmt_iso(tu),"message":{"id":format!("{msg_id}-{rowid}"),"model":model,"content":[{"type":"text","text":v.get("text").and_then(Value::as_str).unwrap_or("")}]}}).to_string(),
+                    _ if user_prompt => json!({"type":"user","timestamp":fmt_iso(tc),"message":{"content":body}}).to_string(),
+                    _ => json!({"type":"assistant","timestamp":fmt_iso(tu),"message":{"id":format!("{msg_id}-{rowid}"),"model":model,"content":[{"type":"text","text":body}]}}).to_string(),
                 };
                 s.ingest(a, &line);
+                if rec {
+                    ops.push(Op::Ingest { agent: a, line });
+                }
                 {
                     lane.part_upd = lane.part_upd.max(tu);
                     lane.emitted.insert(rowid, (state_key, tu));
@@ -384,6 +658,9 @@ fn read_session(conn: &Connection, s: &mut Session, sid: &str, a: usize, lane: &
                 })
                 .to_string();
                 s.ingest(a, &line);
+                if rec {
+                    ops.push(Op::Ingest { agent: a, line });
+                }
                 {
                     lane.part_upd = lane.part_upd.max(tu);
                     lane.emitted.insert(rowid, (state_key, tu));
@@ -397,7 +674,7 @@ fn read_session(conn: &Connection, s: &mut Session, sid: &str, a: usize, lane: &
         }
     }
 
-    Ok(changed)
+    Ok((changed, ops))
 }
 
 /// The last message of a session: its role and, for an assistant, its completion time. The
@@ -494,7 +771,7 @@ fn call_step_id(v: &Value, msg_id: &str) -> String {
     step_id(v["callID"].as_str().unwrap_or("call"), msg_id)
 }
 
-/// Claude-shaped names and safe inputs for the built-in tools; anything matching a configured
+/// Transcript-shaped names and safe inputs for the built-in tools; anything matching a configured
 /// MCP server becomes `mcp__{server}__{tool}`; the rest passes through with clipped scalars.
 fn map_tool(name: &str, input: &Value, servers: &[String]) -> (String, Value) {
     let s = |k: &str| input.get(k).and_then(Value::as_str).unwrap_or("").to_string();
@@ -660,7 +937,7 @@ mod tests {
     }
 
     #[test]
-    fn tool_names_map_to_claude_shapes() {
+    fn tool_names_map_to_transcript_shapes() {
         let (n, i) = map_tool("edit", &json!({"filePath": "/a.rs", "oldString": "x", "newString": "y"}), &[]);
         assert_eq!(n, "Edit");
         assert_eq!(i["file_path"], "/a.rs");
@@ -752,7 +1029,7 @@ mod tests {
         let mut s = Session::new("s1");
         s.alive = true;
         let mut lane = Lane::default();
-        read_session(&c, &mut s, "s1", 0, &mut lane, 2000, &[]).unwrap();
+        read_session(&c, &mut s, "s1", 0, &mut lane, 2000, &[], false).unwrap();
         let st = s.step_by_tool("c1:m1").expect("the step opened");
         assert_eq!(st.summary, "", "the command had not been written yet");
         assert!(st.ended.is_none());
@@ -762,7 +1039,7 @@ mod tests {
             [],
         )
         .unwrap();
-        read_session(&c, &mut s, "s1", 0, &mut lane, 3000, &[]).unwrap();
+        read_session(&c, &mut s, "s1", 0, &mut lane, 3000, &[], false).unwrap();
         let st = s.step_by_tool("c1:m1").unwrap();
         assert_eq!(st.summary, "ls -l", "the input that arrived with the result refreshes the step");
         assert_eq!(st.ended, Some(1500), "closed at the row's completion time");
@@ -781,7 +1058,7 @@ mod tests {
         let mut s = Session::new("s1");
         s.alive = true;
         let mut lane = Lane::default();
-        read_session(&c, &mut s, "s1", 0, &mut lane, 3000, &[]).unwrap();
+        read_session(&c, &mut s, "s1", 0, &mut lane, 3000, &[], false).unwrap();
         let st = s.step_by_tool("c9:m1").unwrap();
         assert_eq!(st.summary, "/x/y.rs");
         assert_eq!(st.ended, Some(1200));
@@ -812,14 +1089,138 @@ mod tests {
         s.alive = true;
         let mut lane = Lane::default();
         // not stable yet (now - tu < 3 s): nothing
-        read_session(&c, &mut s, "s1", 0, &mut lane, 2000, &[]).unwrap();
+        read_session(&c, &mut s, "s1", 0, &mut lane, 2000, &[], false).unwrap();
         assert!(!s.feed.iter().any(|f| f.feed == crate::model::Feed::Answer), "still streaming");
         // settled: the answer lands, first line only
-        read_session(&c, &mut s, "s1", 0, &mut lane, 9_000, &[]).unwrap();
+        read_session(&c, &mut s, "s1", 0, &mut lane, 9_000, &[], false).unwrap();
         let a = s.feed.iter().rev().find(|f| f.feed == crate::model::Feed::Answer).expect("the answer is in the feed");
         assert_eq!(a.text, "the model says hello", "the feed keeps the one-line summary");
         // and it is emitted once
-        read_session(&c, &mut s, "s1", 0, &mut lane, 12_000, &[]).unwrap();
+        read_session(&c, &mut s, "s1", 0, &mut lane, 12_000, &[], false).unwrap();
         assert_eq!(s.feed.iter().filter(|f| f.feed == crate::model::Feed::Answer).count(), 1);
+    }
+
+    #[test]
+    fn bodies_never_cross_the_wire() {
+        // The export promise, checked on the serialized bytes: feed a database whose rows hold
+        // known secrets in exactly the fields the format must drop — edit bodies, the chain of
+        // thought, the subagent prompt, an edit's raw output — and assert none survive to the wire.
+        const OLD: &str = "ZZOLDbodyZZ";
+        const NEW: &str = "ZZNEWbodyZZ";
+        const REASON: &str = "ZZREASONbodyZZ";
+        const TASKPROMPT: &str = "ZZTASKpromptZZ";
+        const EDITOUT: &str = "ZZEDIToutbodyZZ";
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch(
+            "create table message (id text primary key, session_id text, data text, time_created int, time_updated int);
+             create table part (id text primary key, session_id text, message_id text, data text, time_created int, time_updated int);",
+        )
+        .unwrap();
+        c.execute("insert into message values ('m1','ses_root','{\"role\":\"assistant\",\"time\":{\"completed\":9000}}',1000,1000)", []).unwrap();
+        let rows = [
+            (
+                "p1",
+                format!(
+                    "{{\"type\":\"tool\",\"tool\":\"edit\",\"callID\":\"c1\",\"state\":{{\"status\":\"completed\",\"input\":{{\"filePath\":\"/home/u/app.ts\",\"oldString\":\"{OLD}\",\"newString\":\"{NEW}\\nadded1\\nadded2\"}},\"output\":\"{EDITOUT}\"}}}}"
+                ),
+                1000i64,
+                5000i64,
+            ),
+            ("p2", format!("{{\"type\":\"reasoning\",\"text\":\"{REASON}\"}}"), 1100, 5000),
+            ("p3", "{\"type\":\"text\",\"text\":\"the answer line\\nsecond\"}".to_string(), 1150, 5000),
+            (
+                "p4",
+                format!(
+                    "{{\"type\":\"tool\",\"tool\":\"task\",\"callID\":\"c2\",\"state\":{{\"status\":\"completed\",\"input\":{{\"prompt\":\"{TASKPROMPT}\",\"subagent_type\":\"explore\",\"description\":\"d\"}},\"metadata\":{{\"sessionId\":\"ses_kid\"}},\"output\":\"task said\"}}}}"
+                ),
+                1200,
+                5000,
+            ),
+        ];
+        for (id, data, tc, tu) in rows {
+            c.execute("insert into part values (?1,'ses_root','m1',?2,?3,?4)", params![id, data, tc, tu]).unwrap();
+        }
+        let mut s = Session::new("ses_root");
+        s.alive = true;
+        let mut lane = Lane::default();
+        let (_chg, ops) = read_session(&c, &mut s, "ses_root", 0, &mut lane, 9000, &[], true).unwrap();
+        assert!(!ops.is_empty(), "the reader emitted operations to ship");
+        let env = HostEnvelope {
+            format: EXPORT_FORMAT,
+            opencode: OPENCODE_SEEN.to_string(),
+            host: "h".to_string(),
+            now: 9000,
+            sessions: vec![HostSession {
+                id: "ses_root".to_string(),
+                directory: "/home/u".to_string(),
+                title: String::new(),
+                model: "qwen3.8".to_string(),
+                children: vec![],
+                count: ops.len(),
+                ops,
+            }],
+        };
+        let wire = env.to_json().to_string();
+        for secret in [OLD, NEW, REASON, TASKPROMPT, EDITOUT] {
+            assert!(!wire.contains(secret), "the export leaked the body `{secret}` onto the wire");
+        }
+        // ...while the summaries that are meant to travel do: the edited path, the task's type,
+        // the answer's first line, and the edit's added/removed line counts (never their text).
+        assert!(wire.contains("/home/u/app.ts"), "the edit's file path is a summary and should travel");
+        assert!(wire.contains("explore"), "the subagent type travels");
+        assert!(wire.contains("the answer line"), "the answer's first line is the summary");
+        assert!(wire.contains("+x"), "the edit reaches the city as line counts");
+        assert!(!wire.contains("second"), "only the first line of the answer is kept");
+    }
+
+    #[test]
+    fn operations_round_trip_and_replay_rebuilds_the_session() {
+        // The wire is the whole fidelity contract: serialize the operations a read produced, parse
+        // them back, replay onto a fresh Session, and the replayed card matches the original.
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch(
+            "create table message (id text primary key, session_id text, data text, time_created int, time_updated int);
+             create table part (id text primary key, session_id text, message_id text, data text, time_created int, time_updated int);",
+        )
+        .unwrap();
+        c.execute("insert into message values ('m1','s1','{\"role\":\"assistant\"}',1000,1000)", []).unwrap();
+        c.execute(
+            "insert into part values ('p1','s1','m1','{\"type\":\"tool\",\"tool\":\"bash\",\"callID\":\"c1\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"ls -l\"},\"output\":\"total 1\"}}',1000,1500)",
+            [],
+        )
+        .unwrap();
+        let mut orig = Session::new("s1");
+        orig.alive = true;
+        let mut lane = Lane::default();
+        let (_chg, ops) = read_session(&c, &mut orig, "s1", 0, &mut lane, 3000, &[], true).unwrap();
+
+        // through json, and back
+        let value = Value::Array(ops.iter().map(Op::to_json).collect());
+        let back: Vec<Op> = value.as_array().unwrap().iter().filter_map(Op::from_json).collect();
+        assert_eq!(back.len(), ops.len(), "every operation survives the wire format");
+
+        let mut replayed = Session::new("s1");
+        replayed.alive = true;
+        apply_ops(&mut replayed, &back);
+        let st = replayed.step_by_tool("c1:m1").expect("the step was rebuilt");
+        assert_eq!(st.summary, "ls -l");
+        assert_eq!(st.ended, Some(1500));
+        assert_eq!(st.result, "total 1");
+    }
+
+    #[test]
+    fn status_op_abandons_a_dangling_call_on_the_central() {
+        // A host that decides "idle" shipped a Status op; replaying it must close a call the
+        // records left open, exactly as the host did, so the remote card stops shimmering.
+        let mut s = Session::new("s1");
+        s.alive = true;
+        let open =
+            json!({"type":"assistant","timestamp":fmt_iso(1000),"message":{"content":[{"type":"tool_use","id":"c1","name":"Bash","input":{"command":"x"}}]}})
+                .to_string();
+        apply_ops(&mut s, &[Op::Ingest { agent: 0, line: open }]);
+        assert!(s.step_by_tool("c1").unwrap().ended.is_none(), "still open before the verdict");
+        apply_ops(&mut s, &[Op::Status { status: "idle".to_string(), at: 5000 }]);
+        assert_eq!(s.status, "idle");
+        assert_eq!(s.step_by_tool("c1").unwrap().ended, Some(5000), "idle abandons the dangling call");
     }
 }

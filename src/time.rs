@@ -6,7 +6,7 @@ pub fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
-/// Parses the UTC timestamps Claude Code writes, such as `2026-10-02T23:56:06.584Z`.
+/// Parses the UTC timestamps opencode writes, such as `2026-10-02T23:56:06.584Z`.
 pub fn parse_iso_ms(s: &str) -> Option<i64> {
     let num = |a: usize, b: usize| -> Option<i64> { s.get(a..b)?.parse().ok() };
     let (y, mo, d) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
@@ -75,7 +75,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_claude_timestamps() {
+    fn parses_transcript_timestamps() {
         assert_eq!(parse_iso_ms("1970-01-01T00:00:00.000Z"), Some(0));
         assert_eq!(parse_iso_ms("2026-10-02T23:56:06.579Z"), Some(1_790_985_366_579));
         assert_eq!(parse_iso_ms("2024-02-29T12:00:00Z"), Some(1_709_208_000_000));

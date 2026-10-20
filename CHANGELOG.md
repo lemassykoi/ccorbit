@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0 - 2026-10-20
+
+- **Remote opencode hosts** (`--hosts <FILE>` + `--export <ADDR>`): one central ccorbit watches
+  several machines. Each host runs `ccorbit --export <host:port>` (server mode), which reads only
+  that box's `opencode.db` (read-only) and publishes the same **body-free summary operations** the
+  wall keeps in memory — never message bodies, reasoning text, edited text or file contents. The
+  central lists the peers in a JSON file and folds their sessions into the wall, tree, HUD and code
+  city, keyed by a host-qualified id and marked with a host chip. Sessions are decided busy/idle
+  **on the host** (so NTP skew cannot flip them); a host that is down degrades alone (stale marker,
+  backoff, then drops), and one that disagrees on the wire or opencode version is shown as an error
+  rather than misread. All transport is `http://` only through the new `src/net.rs` (the shared
+  `http_get` client and the export `TcpListener`) — the engine pulse is no longer the only socket,
+  but every socket still lives in that one file, which `tests/rules.rs` now enforces by file.
+  Opt-in: without `--hosts`/`--export` ccorbit is exactly v0.3.0. See README "Remote hosts" and
+  docs/DECISIONS.md.
+- **Rebranded as an opencode monitor:** the leftover Claude-Code language is gone from the README,
+  the module docs, code comments and the `--demo` sessions (its chips now show local model names,
+  with the demo carrying its own cost the way the reader does). The Anthropic pricing table and the
+  `claude-` / `claude_ai_` handling stay — they correctly price and parse real Anthropic models and
+  MCP servers that opencode sessions may use.
+
 ## 0.3.0 - 2026-10-19
 
 - **The live source is opencode** (fork): sessions, prompts, steps, subagents, skills, MCP
@@ -36,9 +57,9 @@
 - **Quieter notices:** failed shell commands no longer raise one each (the feed shows them, and
   repeated failures raise a warning); the same notice again is counted (`×4`) instead of stacking;
   notices slide in whole.
-- **Windows:** a Windows build and a PowerShell installer; sessions are found under
-  `%USERPROFILE%\.claude` and checked with the Windows process API; paths with `\` are read
-  everywhere; Windows Terminal gets 24-bit color. Tested by CI, not yet against real sessions.
+- **Windows:** a Windows build and a PowerShell installer; sessions are found under opencode's
+  storage on Windows, paths with `\` are read everywhere, and Windows Terminal gets 24-bit color.
+  Tested by CI, not yet against real sessions.
 - Hidden `--jump-check` and `--bench-hud` options for diagnostics.
 
 ## 0.1.0 - 2026-10-17

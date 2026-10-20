@@ -95,19 +95,49 @@ fn the_program_never_runs_a_command() {
 
 #[test]
 fn the_program_never_opens_a_network_connection() {
-    let found = offenders(&["std::net", "TcpStream", "TcpListener", "UdpSocket", "reqwest", "ureq", "hyper::"], "harness: allow network", |_| true);
+    // The engine pulse, the hosts poller and the export listener are the only network, and all of
+    // their transport lives in one file: src/net.rs. The rule is by file, not by line marker — a
+    // socket type anywhere outside net.rs (even in a marked line) is a promise broken, and net.rs
+    // itself is trusted to keep them in the handful of http_get / listen / serve_on / read_request.
+    let patterns = ["std::net", "TcpStream", "TcpListener", "UdpSocket", "reqwest", "ureq", "hyper::"];
+    let mut found = Vec::new();
+    for (file, text) in sources() {
+        if file == "src/net.rs" {
+            continue; // the one sanctioned socket file
+        }
+        for (_, line) in program_lines(&text) {
+            let code = line.split("//").next().unwrap_or("");
+            if let Some(p) = patterns.iter().find(|p| code.contains(*p)) {
+                found.push(format!("  {file}: `{p}` in `{}`", line.trim()));
+            }
+        }
+    }
     assert!(
         found.is_empty(),
-        "ccorbit never opens a network connection (docs/INVARIANTS.md), except the read-only engine pulse, which only the `harness: allow network` lines in src/engines.rs may do. These lines do:\n{}\n\n\
-         Fix: everything ccorbit shows comes from reading files (opencode's storage database); take the information from there.",
+        "ccorbit never opens a network connection (docs/INVARIANTS.md), except the opt-in engine pulse, \
+         hosts poller and export listener — all of whose transport lives in src/net.rs. These lines put a \
+         socket elsewhere:\n{}\n\n\
+         Fix: everything ccorbit shows comes from reading files (opencode's storage database) or, with an \
+         opt-in flag, via src/net.rs. Move the connection into net.rs and call it from here.",
         found.join("\n")
     );
 }
 
 #[test]
 fn the_data_layer_knows_nothing_of_the_screen() {
-    let data =
-        ["src/model.rs", "src/parse.rs", "src/time.rs", "src/price.rs", "src/insight.rs", "src/source.rs", "src/demo.rs", "src/opencode.rs", "src/engines.rs"];
+    let data = [
+        "src/model.rs",
+        "src/parse.rs",
+        "src/time.rs",
+        "src/price.rs",
+        "src/insight.rs",
+        "src/source.rs",
+        "src/demo.rs",
+        "src/opencode.rs",
+        "src/engines.rs",
+        "src/net.rs",
+        "src/hosts.rs",
+    ];
     let found = offenders(&["ratatui", "crate::ui", "crate::hud", "crossterm"], "harness: allow ui", |f| data.contains(&f));
     assert!(
         found.is_empty(),

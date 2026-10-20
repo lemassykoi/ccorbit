@@ -1,4 +1,4 @@
-//! Session state built from Claude Code transcript lines: agents, their steps, background
+//! Session state built from transcript records (the internal record format): agents, their steps, background
 //! tasks, workflow runs, MCP connections, skills, a short event feed and an activity histogram.
 //! Message bodies are never kept, only one-line summaries.
 use crate::parse;
@@ -70,7 +70,7 @@ impl Step {
     pub fn failed(&self) -> bool {
         self.error || self.bg.as_ref().is_some_and(|b| matches!(b.status.as_str(), "failed" | "error"))
     }
-    /// Stopped on purpose, or lost when the Claude Code process restarted.
+    /// Stopped on purpose, or lost when its opencode process restarted.
     pub fn stopped(&self) -> bool {
         self.bg.as_ref().is_some_and(|b| matches!(b.status.as_str(), "killed" | "stopped" | "lost"))
     }
@@ -150,7 +150,7 @@ pub enum Phase {
     Write,
     Tool,
 }
-/// A context compaction, from the `compact_boundary` record Claude Code writes.
+/// A context compaction, from the `compact_boundary` record the reader emits.
 pub struct Compaction {
     pub at: i64,
     /// Context size when it fired.
@@ -420,7 +420,11 @@ impl Activity {
 }
 pub struct Session {
     pub id: String,
-    /// The Claude Code process, from the registry (0 when unknown).
+    /// Which machine this session belongs to: empty for the local box, a host name otherwise.
+    /// Remote sessions come from another `opencode.db`, so their `id` is host-qualified and this
+    /// names the machine for the card chip and the code-city districts.
+    pub host: String,
+    /// A session/process label (`projects-…`), from opencode's storage or the registry.
     pub name: String,
     pub cwd: String,
     pub status: String,
@@ -474,6 +478,7 @@ impl Session {
     pub fn new(id: &str) -> Session {
         Session {
             id: id.to_string(),
+            host: String::new(),
             name: String::new(),
             cwd: String::new(),
             status: String::new(),
@@ -917,7 +922,7 @@ impl Session {
             self.push_feed(FeedItem { at, feed: if failed { Feed::Failed } else { Feed::Done }, kind: Some(kind), label, text: summary, tool: Some(id) });
         }
     }
-    /// A `workflows/wf_*.json` run record. Claude Code writes it when the run ends.
+    /// A `workflows/wf_*.json` run record, written when a workflow run ends.
     pub fn on_workflow_json(&mut self, v: &Value) {
         let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
         let (run_id, task_id) = (s("runId"), s("taskId"));
@@ -1200,7 +1205,7 @@ impl Session {
         self.agents.iter().fold(Tokens::default(), |t, a| t.plus(a.tokens()))
     }
     /// Where the context stands against the compaction ceiling (see `insight::ceiling`), and
-    /// how many calls are left at the pace of the last ones. Claude Code may compact earlier.
+    /// how many calls are left at the pace of the last ones. opencode may compact earlier.
     pub fn forecast(&self, ceiling: Option<u64>) -> Forecast {
         let ctx = self.agents[0].ctx;
         let (limit, known) = match ceiling.filter(|&c| c > ctx) {
@@ -1350,7 +1355,7 @@ mod tests {
         s.alive = true;
         let t = "2026-10-16T10:00:00.000Z";
         s.ingest(0, &line(serde_json::json!({"type":"user","timestamp":t,"message":{"content":"hello there"}})));
-        s.ingest(0, &line(serde_json::json!({"type":"assistant","timestamp":t,"message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":10,"output_tokens":5},"content":[
+        s.ingest(0, &line(serde_json::json!({"type":"assistant","timestamp":t,"message":{"id":"m1","model":"qwen3.8","usage":{"input_tokens":10,"output_tokens":5},"content":[
             {"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls","description":"List files"}},
             {"type":"tool_use","id":"t2","name":"Agent","input":{"description":"Audit","subagent_type":"Explore"}},
             {"type":"tool_use","id":"t3","name":"mcp__claude_ai_Notion__notion-search","input":{"query":"x"}}

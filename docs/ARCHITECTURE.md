@@ -10,6 +10,10 @@ opencode.db ──▶ source ──▶ model (Session::ingest, one record at a t
                  demo         and demo feed records directly)
 engine urls ──▶ engines ─────────────────────────────────────────────────────────────────▶ footer
  (opt-in)       read-only pulse
+remote boxes ──▶ hosts ──▶ (merged into source.sessions by host-qualified ids) ──▶ all screens
+ (opt-in)        poll each exporter's /export (net::http_get), replay its summary operations
+this box's db ──▶ opencode (export side) ──▶ net::serve ──▶ GET /export ──▶ a peer ccorbit
+ (opt-in)        summaries only: the same body-free records the wall keeps in memory
 - **model** reads records into state. It knows the transcript format (see
   [TRANSCRIPT_FORMAT.md](TRANSCRIPT_FORMAT.md)), nothing about screens.
 - **insight** computes readings that need several sessions at once: alerts, collisions, races,
@@ -26,8 +30,10 @@ All of these are the data layer. They must not import `ratatui`, `crossterm`, `c
 |---|---|---|
 | `src/main.rs` | entry | Options (`Opts`), startup, hidden developer options, terminal setup |
 | `src/source.rs` | data | `World`: the three sources (live opencode, replay, demo) behind one `tick`, and the clock |
-| `src/opencode.rs` | data | The live source: opens opencode's storage database read-only, follows rows per session, translates them into transcript records; subagent children hang under their task call |
+| `src/opencode.rs` | data | The live source: opens opencode's storage database read-only, follows rows per session, translates them into transcript records; subagent children hang under their task call. In `--export` mode it also records those operations (and the liveness verdict) so a peer ccorbit can replay them — the body-free summaries are the only thing that leaves the box |
 | `src/engines.rs` | data | The opt-in engine pulse: one short http GET per listed engine per 2 s, vLLM Prometheus counters and llama.cpp-style status into footer numbers |
+| `src/hosts.rs` | data | The `--hosts` poller: reads each listed remote exporter's `/export`, replays its summary operations into host-qualified `Session`s, and marks a silent host stale |
+| `src/net.rs` | data | The only socket in the program: the shared `http_get` client (used by `--engines` and `--hosts`) and the `--export` `TcpListener`; `http://` only, short timeouts, capped replies |
 | `src/model.rs` | data | `Session::ingest`: steps, agents, background tasks, workflows and their live agents, tokens split by cache, phases (brainwave), files, compactions, durations by kind, price |
 | `src/parse.rs` | data | Small tolerant readers: tool kinds, summaries, workflow meta, call signatures and duration keys, paths |
 | `src/insight.rs` | data | Readings across sessions: slow and looping calls, collisions, workflow races, compaction ceilings and forecasts |
@@ -43,7 +49,8 @@ All of these are the data layer. They must not import `ratatui`, `crossterm`, `c
 
 ## The run loop
 
-`ui::run` ticks the world every 250 ms (80 ms in replay), polls the engines (throttled to 2 s
+`ui::run` ticks the world every 250 ms (80 ms in replay) — the world's tick advances the live reader
+and polls the remote hosts (each throttled to 1 s inside) — polls the engines (throttled to 2 s
 inside), turns new events into notices, and
 draws when something changed or the frame interval passed: 30 frames a second in the hologram
 (`--fps`), about 11 on the other screens while something moves, 2 when nothing does. A frame of

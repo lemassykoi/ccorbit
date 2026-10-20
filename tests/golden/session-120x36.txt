@@ -1,15 +1,15 @@
-▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$343/h
+▐ ◆ CCORBIT ▌  DEMO  made-up sessions  4 sessions · 3 busy · 3 agents running   ✖ 1 collision   ⇡ 180k/s ⇣ 593/s ≈$474/h
 ╭ ∿ VITALS · last 5 minutes ────────────────────────────────────────────╮ ╭ ▸ DETAIL ─────────────────────────────────╮
 │ THINK ⠟⠦⣤⠖⠲⠤⠖⠒⠦⠴⠒⠦⠴⠒⠲⠤⠞⠳⠤⠴⠛⠦⠴⠋⢳⡤⠖⠲⣄⡖⠛⠦⠴⠒⢦⣠⠖⠲⣤⠞⠓⣆⡴⠛⠦⠤  3m56s · 49k tok │▌│tool     Edit                              │▌
 │ WRITE ⠤⢤⡤⠖⠲⠤⠖⠒⠦⠴⠒⠦⠤⠖⠲⠤⠞⠳⠤⠴⠛⢦⡴⠋⠳⣤⠖⠲⣤⠖⠛⢦⡴⠒⠦⠤⠞⠳⠤⠖⠒⠦⠴⠒⠦⠤  2m21s           │▌│about    …/lib/pricing.ts                  │▌
 │ TOOLS ⠤⠤⠤⠖⠲⣤⠖⠦⠤⠴⠒⠦⠤⠖⠲⠤⠤⠶⠤⠴⠒⠦⠴⠦⠶⠤⠖⠲⠤⠖⠒⠦⠴⠒⠦⠤⠖⠲⣤⠤⠖⠦⠴⠒⠦⠤  1m09s           │▌│status   done in 0.4s                      │▌
-│ ⇡ sent ▇▆▇▇·▁▇▇▁▇█· 56k/s   ⇣ generated ▄▃▅▃·▆▁▄▁▆█· 422/s   log 306 B│▌│started  6.2s ago                          │▌
+│ ⇡ sent ▇▆▇▇·▁▇▇▁▇█· 56k/s   ⇣ generated ▄▃▅▃·▆▁▄▁▆█· 422/s   log 321 B│▌│started  6.2s ago                          │▌
 │ ◉ 96% cache · read 12M · written 489k · fresh 201 (5 min)   ✺ rebuilt │▌│result   ok                                │▌
 │ ctx ████░░░░░░░░ 36%  355k / 968k ceiling (seen) · in ~295 calls, ~36m│▌│                                           │▌
 ╰───────────────────────────────────────────────────────────────────────╯▌│                                           │▌
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘│                                           │▌
 ╭ ▸ webapp · Checkout redesign ────────────────────────── BUSY · FOLLOW ╮ │                                           │▌
-│      ▾ ⠦ review:securi…          1 steps · out 891 · sonnet-5-5 · 7.9s│▌│                                           │▌
+│      ▾ ⠦ review:securi…       1 steps · out 891 · qwen3.8-coder · 7.9s│▌│                                           │▌
 │          ✓ Edit       …/components/CartSummary.tsx                0.3s│▌│                                           │▌
 │    ▸ ○ 3 Verify                                                       │▌│                                           │▌
 │    ▸ ○ 4 Fix                                                          │▌│                                           │▌

@@ -2,23 +2,19 @@
 //! decode rate, queue) polled from engines the person lists in an `--engines` JSON file. Each
 //! entry is `{name, url, kind, key_file}` with `kind` `vllm` (a Prometheus `/metrics`) or
 //! `strata` (a status `/status`). `http://` only, one short connection per poll, replies read
-//! but never written: this is the one place ccorbit talks to a port, and only to the addresses
-//! listed in that file.
+//! but never written. The socket itself lives in `src/net.rs` (`net::http_get`); this module holds
+//! only the engine list and the counter math, and never talks to a port directly.
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs}; // harness: allow network (engines listed in --engines)
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
+use crate::net;
+
 /// Poll every two seconds: the gauges are averages over a second anyway, and the frames are 30.
 const POLL_EVERY: Duration = Duration::from_secs(2);
-const CONNECT_TIMEOUT: Duration = Duration::from_millis(700);
-const READ_TIMEOUT: Duration = Duration::from_millis(1500);
-/// Never swallow more than this from one reply.
-const MAX_REPLY: u64 = 4 << 20;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -77,13 +73,7 @@ impl Engines {
                         _ if url.ends_with("/status") || url.contains("status") => Kind::Strata,
                         _ => Kind::Vllm,
                     };
-                    let key = e
-                        .get("key_file")
-                        .and_then(Value::as_str)
-                        .map(expand_home)
-                        .and_then(|p| std::fs::read_to_string(p).ok())
-                        .map(|k| k.trim().to_string())
-                        .filter(|k| !k.is_empty());
+                    let key = e.get("key_file").and_then(Value::as_str).map(net::expand_home).and_then(|p| net::read_key(&p));
                     list.push(Engine {
                         name: e.get("name").and_then(Value::as_str).unwrap_or("engine").to_string(),
                         url: url.to_string(),
@@ -147,7 +137,7 @@ impl Engine {
             return false;
         }
         self.last_poll = Some(Instant::now());
-        let (ok, body) = match http_get(&self.url, self.key.as_deref()) {
+        let (ok, body) = match net::http_get(&self.url, self.key.as_deref()) {
             Ok(b) => (true, b),
             Err(_) => (false, String::new()),
         };
@@ -252,51 +242,6 @@ impl Engine {
         }
         parts.join(" · ")
     }
-}
-
-fn expand_home(p: &str) -> PathBuf {
-    if let Some(rest) = p.strip_prefix("~/")
-        && let Some(home) = std::env::var_os("HOME")
-    {
-        return PathBuf::from(home).join(rest);
-    }
-    PathBuf::from(p)
-}
-
-/// One short HTTP/1.1 GET, no keep-alive, capped reply. Only for the plain-HTTP loopback and
-/// LAN endpoints listed in the engines file.
-fn http_get(url: &str, key: Option<&str>) -> Result<String, String> {
-    let rest = url.strip_prefix("http://").ok_or("only http:// engine urls are read")?;
-    let (host_port, path) = match rest.split_once('/') {
-        Some((h, p)) => (h, format!("/{p}")),
-        None => (rest, "/".to_string()),
-    };
-    let (host, port) = match host_port.rsplit_once(':') {
-        Some((h, p)) => (h.to_string(), p.parse().map_err(|_| "bad port")?),
-        None => (host_port.to_string(), 80u16),
-    };
-    let addr = (host.as_str(), port)
-        .to_socket_addrs() // harness: allow network (engines listed in --engines)
-        .map_err(|e| format!("resolve {host}: {e}"))?
-        .next()
-        .ok_or("no address")?;
-    let mut sock = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT).map_err(|e| format!("connect: {e}"))?; // harness: allow network (engines listed in --engines)
-    let _ = sock.set_read_timeout(Some(READ_TIMEOUT));
-    let _ = sock.set_write_timeout(Some(READ_TIMEOUT));
-    let auth = match key {
-        Some(k) => format!("Authorization: Bearer {k}\r\n"),
-        None => String::new(),
-    };
-    let req = format!("GET {path} HTTP/1.1\r\nHost: {host_port}\r\n{auth}Accept: */*\r\nConnection: close\r\n\r\n");
-    sock.write_all(req.as_bytes()).map_err(|e| format!("send: {e}"))?;
-    let mut raw = Vec::new();
-    sock.take(MAX_REPLY).read_to_end(&mut raw).map_err(|e| format!("recv: {e}"))?;
-    let text = String::from_utf8_lossy(&raw).into_owned();
-    let (head, body) = text.split_once("\r\n\r\n").ok_or("malformed reply")?;
-    if !head.starts_with("HTTP/1.1 200") && !head.starts_with("HTTP/1.0 200") {
-        return Err(format!("status {}", head.lines().next().unwrap_or("?")));
-    }
-    Ok(body.to_string())
 }
 
 #[cfg(test)]
