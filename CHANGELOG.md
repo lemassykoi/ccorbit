@@ -1,12 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 - 2026-10-20
 
 - **`ccorbit-export`, a light standalone exporter (server mode):** the reader stack compiled without
   the terminal (`src/bin/ccorbit-export.rs`) — the same `GET /export`, but no `ratatui` (about
   2.4 MB vs 3.4 MB) — for the boxes you only *publish from*. `ccorbit --export` still does the
   identical job from the full binary. The `--export`/`--hosts` protocol and the shared
   `~/.config/ccorbit/host-key` are unchanged.
+- **Fix: the wall crashed replaying a host session's child agent.** When a poller's operation-log
+  cursor desynced from the exporter (a host restart or re-emit), a subagent's `Ingest` replayed onto
+  an agent that was never added → index out of bounds. The central now rebuilds each host session
+  from the full operation log (correct by construction), and `Session::ingest` drops an unknown-agent
+  line instead of aborting — a monitor must never die on the data it reads.
+- **Fix: a reverted question stuck the card at NEEDS YOU.** opencode's revert deletes the
+  `AskUserQuestion` rows, but the reader had already emitted its open `tool_use`, so liveness pinned
+  the session busy forever while opencode showed it idle. A question now only holds a session busy
+  while it is the newest row; a ghost behind newer activity goes idle and its dangling step is
+  abandoned, exactly like a crashed turn.
+- **Docs:** a Contents index at the top of the README.
 
 ## 0.4.0 - 2026-10-20
 
