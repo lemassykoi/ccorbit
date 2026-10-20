@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
-use crate::model::Session;
+use crate::model::{Session, Step};
 use crate::net;
 use crate::parse;
 use crate::time::fmt_iso;
@@ -41,6 +41,19 @@ const BLIP: i64 = 15_000;
 /// progress: a tool running past it is shown idle and its step closed as lost (it is rare that
 /// a legitimate call runs silent this long, and the card heals itself on the next row).
 const DEAD: i64 = 10 * 60_000;
+/// A question row counts as the live edge within this window: a genuinely pending question has its
+/// own row as the newest (its time_updated lags its creation by less than this), so it keeps NEEDS
+/// YOU; a question orphaned by later rows -- an answered one, or a revert that deleted it -- is a
+/// ghost and stops pinning the session busy.
+const QUESTION_CURRENT: i64 = 60_000;
+/// An open question/plan step holds a session "busy" (NEEDS YOU) only while it is at the live
+/// edge: `last_act` is this session's newest part-row time, so a question whose step started well
+/// before it was answered or had its rows deleted by a revert -- a ghost, not a real wait. A live
+/// question is itself the newest row, so the difference stays within the grace.
+fn question_is_live(step: &Step, last_act: i64) -> bool {
+    step.ended.is_none() && matches!(step.name.as_str(), "AskUserQuestion" | "ExitPlanMode") && last_act - step.started <= QUESTION_CURRENT
+}
+
 /// The export wire format version. The central refuses a host that speaks another version rather
 /// than mis-parsing it (opencode's own version travels alongside). Bumping this is a real break.
 pub const EXPORT_FORMAT: u32 = 1;
@@ -444,7 +457,12 @@ impl Open {
             }
             let (role, completed) = last_message(conn, id)?;
             let turn_open = role.as_deref() == Some("assistant") && completed.is_none();
-            let waiting = sessions[si].steps().any(|(_, st)| st.ended.is_none() && matches!(st.name.as_str(), "AskUserQuestion" | "ExitPlanMode"));
+            // A question keeps a session busy only while it is the newest thing in the transcript.
+            // If any row has advanced past the question (its step started well before lane.last_act),
+            // the question was answered or its rows were deleted by a revert -- the still-open step
+            // is a ghost, so go idle and let abandon_running close it. A real, unanswered question
+            // leaves its own row as the newest (within the grace), so it keeps NEEDS YOU.
+            let waiting = sessions[si].steps().any(|(_, st)| question_is_live(st, lane.last_act));
             let working = waiting || (turn_open && quiet <= DEAD) || (role.as_deref() == Some("user") && quiet <= BLIP);
             if !working {
                 sessions[si].abandon_running(now);
@@ -1222,5 +1240,32 @@ mod tests {
         apply_ops(&mut s, &[Op::Status { status: "idle".to_string(), at: 5000 }]);
         assert_eq!(s.status, "idle");
         assert_eq!(s.step_by_tool("c1").unwrap().ended, Some(5000), "idle abandons the dangling call");
+    }
+
+    #[test]
+    fn a_question_holds_busy_only_at_the_live_edge() {
+        // Jarvis's real failure: opencode deleted the AskUserQuestion rows on a revert, but the
+        // reader kept its open step, so liveness pinned the session busy -> NEEDS YOU forever. The
+        // gate is `question_is_live`: a question only counts while its own row is the newest thing
+        // (a real wait); any row advanced past it makes it a ghost, so the session goes idle and
+        // abandon_running closes the dangling step (covered by status_op_abandons_... above).
+        let mut s = Session::new("s");
+        s.alive = true;
+        s.ingest(
+            0,
+            &json!({"type":"assistant","timestamp":fmt_iso(90_000),"message":{"content":[{"type":"tool_use","id":"q","name":"AskUserQuestion","input":{"questions":[{"header":"h","question":"pick"}]}}]}})
+                .to_string(),
+        );
+        let q = s.step_by_tool("q").unwrap();
+        assert_eq!(q.started, 90_000, "the step remembers when the question appeared");
+        assert!(question_is_live(q, 90_000), "with nothing newer it is a real wait");
+        assert!(question_is_live(q, 120_000), "a small lag on the question's own row still holds (within the grace)");
+        assert!(!question_is_live(q, 200_000), "a much newer row means opencode moved on: a ghost, not busy");
+        // A plain tool is never a hold.
+        s.ingest(0, &json!({"type":"assistant","timestamp":fmt_iso(90_000),"message":{"content":[{"type":"tool_use","id":"b","name":"Bash","input":{"command":"x","description":"d"}}]}}).to_string());
+        assert!(!question_is_live(s.step_by_tool("b").unwrap(), 90_000));
+        // Once answered (ended), it never holds.
+        s.ingest(0, &json!({"type":"user","timestamp":fmt_iso(90_500),"message":{"content":[{"type":"tool_result","tool_use_id":"q","is_error":false,"content":"answered"}]}}).to_string());
+        assert!(!question_is_live(s.step_by_tool("q").unwrap(), 90_000), "answered: ended");
     }
 }
