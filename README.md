@@ -27,6 +27,17 @@ few percent while it animates.
 
 <sub>Recorded with `ccorbit --demo`: made-up sessions, nothing real.</sub>
 
+## Contents
+
+- [Install](#install) — [from source](#from-source) · [if the build fails on macOS](#if-the-build-fails-on-macos)
+- [Screens](#screens) — [Wall](#wall-the-start-screen) · [Session](#session-enter-on-a-card) · [HUD hologram](#hud-g-the-hologram) · [Code city](#code-city-c) · [The engine pulse](#the-engine-pulse) · [Remote hosts](#remote-hosts)
+- [Keys](#keys)
+- [Options](#options)
+- [What it reads](#what-it-reads)
+- [Limits](#limits)
+- [Development](#development) — [Releasing](#releasing)
+- [License](#license)
+
 ## Install
 
 Prebuilt binaries for Linux, macOS and Windows (x86_64 and Apple silicon), from this fork's
