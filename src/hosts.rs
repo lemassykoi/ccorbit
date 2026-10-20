@@ -171,20 +171,34 @@ impl Host {
         for hs in &env.sessions {
             let qual = format!("{me}:{}", hs.id);
             present.insert(qual.clone());
-            let ai = match sessions.iter().position(|s| s.id == qual) {
-                Some(i) => i,
-                None => {
-                    let mut s = Session::new(&qual);
-                    s.host = me.clone();
-                    s.name = format!("projects-{}", tag_of(&hs.id));
-                    s.alive = true;
-                    sessions.push(s);
-                    changed = true;
-                    sessions.len() - 1
+            // Rebuild from the whole operation log whenever it changed (or the card is new). The
+            // exporter ships the full log each poll, in the order the reader produced it, so a
+            // child's AddAgent always precedes its Ingest lines; replaying the full list onto a
+            // fresh Session is correct by construction. The old suffix-append assumed `ops[..done]`
+            // was an unchanged prefix -- but a host restart/re-emit shifts that prefix, the
+            // AddAgent falls in the skipped range, and an Ingest for a never-registered agent
+            // then indexes `self.agents` out of bounds (a crash). Rebuilding removes that class.
+            let built = applied.get(&qual).copied();
+            if built != Some(hs.ops.len()) {
+                let mut fresh = Session::new(&qual);
+                fresh.host = me.clone();
+                fresh.name = format!("projects-{}", tag_of(&hs.id));
+                fresh.cwd = hs.directory.clone();
+                fresh.title = hs.title.clone();
+                fresh.alive = true;
+                apply_ops(&mut fresh, &hs.ops);
+                if fresh.agents.first().is_some_and(|a| a.model.is_empty()) && !hs.model.is_empty() {
+                    fresh.agents[0].model = hs.model.clone();
                 }
-            };
-            {
-                let s = &mut sessions[ai];
+                match sessions.iter().position(|s| s.id == qual) {
+                    Some(i) => sessions[i] = fresh,
+                    None => sessions.push(fresh),
+                }
+                applied.insert(qual, hs.ops.len());
+                changed = true;
+            } else if let Some(i) = sessions.iter().position(|s| s.id == qual) {
+                // Log unchanged: still pick up a folder or title the host renamed.
+                let s = &mut sessions[i];
                 if s.cwd != hs.directory {
                     s.cwd = hs.directory.clone();
                     changed = true;
@@ -193,30 +207,6 @@ impl Host {
                     s.title = hs.title.clone();
                     changed = true;
                 }
-                if s.agents.first().is_some_and(|a| a.model.is_empty()) && !hs.model.is_empty() {
-                    s.agents[0].model = hs.model.clone();
-                }
-            }
-            // The exporter ships the full operation log each poll. Append what is new; if the log
-            // shrank (a host restart, or the reader trimmed past MAX_OPS) rebuild from what is sent.
-            let done = applied.get(&qual).copied().unwrap_or(0);
-            if done <= hs.ops.len() {
-                if hs.ops.len() > done {
-                    apply_ops(&mut sessions[ai], &hs.ops[done..]);
-                    applied.insert(qual, hs.ops.len());
-                    changed = true;
-                }
-            } else {
-                let mut fresh = Session::new(&qual);
-                fresh.host = me.clone();
-                fresh.name = format!("projects-{}", tag_of(&hs.id));
-                fresh.cwd = hs.directory.clone();
-                fresh.title = hs.title.clone();
-                fresh.alive = true;
-                apply_ops(&mut fresh, &hs.ops);
-                sessions[ai] = fresh;
-                applied.insert(qual, hs.ops.len());
-                changed = true;
             }
         }
 
@@ -412,6 +402,38 @@ mod tests {
         let s = sessions.iter().find(|s| s.id == "a:ses_1").unwrap();
         assert!(s.files.contains_key("/home/u/app/z.ts"), "rebuilt from the fresh log");
         assert!(!s.files.contains_key("/home/u/app/x.ts"), "the old state was replaced, not appended");
+    }
+
+    #[test]
+    fn a_child_agent_in_the_full_log_is_built_even_after_a_desynced_cursor() {
+        // The crash: a prior poll left the central with a 3-op log (main only), then the host
+        // (after a restart/re-emit) ships a longer log whose AddAgent sits in the range a naive
+        // suffix-append would have skipped -- so the child's Ingest would index a missing agent.
+        // Rebuilding from the full log must instead register the agent. Regression for the
+        // model.rs:578 index-out-of-bounds panic seen on the wall.
+        let mut a = a_host("a");
+        let mut sessions: Vec<Session> = Vec::new();
+        let mut applied: HashMap<String, usize> = HashMap::new();
+        applied.insert("a:ses_1".to_string(), 3); // the stale cursor from before the desync
+        let ops = vec![
+            Op::Ingest { agent: 0, line: json!({"type":"user","timestamp":fmt_iso(1000),"message":{"content":"a"}}).to_string() },
+            Op::Ingest { agent: 0, line: json!({"type":"user","timestamp":fmt_iso(1500),"message":{"content":"b"}}).to_string() },
+            Op::AddAgent { agent: 1, id: "ses_kid".to_string(), kind: "explore".to_string(), description: "sub".to_string(), parent_tool: None },
+            Op::Ingest { agent: 1, line: json!({"type":"assistant","timestamp":fmt_iso(2000),"message":{"id":"k1","model":"qwen3.8","content":[{"type":"tool_use","id":"tc","name":"Read","input":{"file_path":"/x"}}]}}).to_string() },
+        ];
+        let hs = HostSession {
+            id: "ses_1".to_string(),
+            directory: "/d".to_string(),
+            title: "t".to_string(),
+            model: "qwen3.8".to_string(),
+            children: vec!["ses_kid".to_string()],
+            count: ops.len(),
+            ops,
+        };
+        a.ingest(&body("a", vec![hs]), &mut sessions, 5000, &mut applied);
+        let s = sessions.iter().find(|s| s.id == "a:ses_1").expect("the card");
+        assert_eq!(s.agents.len(), 2, "the child agent was built, not skipped (and no panic)");
+        assert!(s.step_by_tool("tc").is_some(), "the child's step replayed onto its agent");
     }
 
     #[test]

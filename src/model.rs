@@ -569,6 +569,12 @@ impl Session {
         }
     }
     pub fn ingest(&mut self, a: usize, line: &str) {
+        // A reader always registers an agent before emitting to it; if a replayed op names an
+        // index we never added (a shifted prefix, a future bug), drop the line rather than index
+        // out of bounds -- a monitor that watches other people's sessions must not abort on data.
+        if a >= self.agents.len() {
+            return;
+        }
         let Ok(v) = serde_json::from_str::<Value>(line) else { return };
         if a == 0 && v.get("isSidechain").and_then(Value::as_bool) == Some(true) {
             return;
@@ -1380,6 +1386,19 @@ mod tests {
         assert!(!s.agent_running(a));
         assert_eq!(s.mcp["claude_ai_Notion"].calls, 1);
         assert_eq!(s.last_prompt(), Some("hello there"));
+    }
+    #[test]
+    fn an_ingest_for_an_unregistered_agent_is_dropped_not_fatal() {
+        // A replayed op whose agent was never added must be skipped, not index out of bounds.
+        let mut s = Session::new("s");
+        s.alive = true;
+        let line = line(
+            serde_json::json!({"type":"assistant","timestamp":"2026-10-16T10:00:00.000Z","message":{"id":"m","model":"x","content":[{"type":"tool_use","id":"c1","name":"Bash","input":{"command":"ls","description":"d"}}]}}),
+        );
+        s.ingest(5, &line); // agent 5 does not exist
+        assert_eq!(s.agents.len(), 1, "nothing was invented for the missing agent");
+        s.ingest(0, &line); // the real agent still lands
+        assert!(s.step_by_tool("c1").is_some());
     }
     fn ts(sec: i64) -> String {
         format!("2026-10-16T10:{:02}:{:02}.000Z", sec / 60, sec % 60)
