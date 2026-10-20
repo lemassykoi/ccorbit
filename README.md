@@ -183,7 +183,9 @@ two roles, both opt-in: a **server** (`--export`) on each box publishes **body-f
 a **central** (`--hosts`) polls them into one wall; a host that is down degrades on its own (its
 cards dim, then leave) and never blocks the others.
 
-**Server mode** — on every host (including, if you like, the central one), run the exporter as a service:
+**Server mode** — on every host (including, if you like, the central one), publish its summaries. It
+is the same `ccorbit` binary from [Install](#install); there is no separate exporter package to get.
+To try it in the foreground:
 
 ```sh
 mkdir -p ~/.config/ccorbit
@@ -195,6 +197,27 @@ ccorbit --export 0.0.0.0:30002                                    # publish this
 It reads only this box's `opencode.db` (read-only), and answers `GET /export` — with the
 `~/.config/ccorbit/host-key` token presented — by shipping the same one-line summaries ccorbit keeps
 in memory: never message bodies, reasoning text, edited text or file contents.
+
+To keep the server up across reboots, drop in a systemd user unit on that box
+(`~/.config/systemd/user/ccorbit-export.service`) and enable it:
+
+```ini
+[Unit]
+Description=ccorbit exporter (publish this box's opencode summaries to a central ccorbit)
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/ccorbit --export 0.0.0.0:30002
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+```
+
+```sh
+systemctl --user daemon-reload && systemctl --user enable --now ccorbit-export
+```
 
 **Central mode** — on the box you watch from, list the peers in a JSON file and point `--hosts` at it:
 
