@@ -234,6 +234,22 @@ pub fn read_key(path: &Path) -> Option<String> {
     std::fs::read_to_string(path).ok().map(|k| k.trim().to_string()).filter(|k| !k.is_empty())
 }
 
+/// The name the exporter puts in its envelope, shown on each remote card. A bind address that names
+/// a real host uses it; a wildcard bind falls back to the machine's own hostname (read from files
+/// and the environment — never a command). Shared by `ccorbit --export` and `ccorbit-export`.
+pub fn host_name_for(bind: &str) -> String {
+    let host = bind.rsplit_once(':').map(|(h, _)| h).unwrap_or(bind);
+    if !host.is_empty() && host != "0.0.0.0" && host != "::" && host != "*" {
+        return host.to_string();
+    }
+    std::fs::read_to_string("/etc/hostname")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("HOSTNAME").ok().filter(|s| !s.is_empty()))
+        .unwrap_or_else(|| "host".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

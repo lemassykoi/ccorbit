@@ -34,6 +34,7 @@ All of these are the data layer. They must not import `ratatui`, `crossterm`, `c
 | `src/engines.rs` | data | The opt-in engine pulse: one short http GET per listed engine per 2 s, vLLM Prometheus counters and llama.cpp-style status into footer numbers |
 | `src/hosts.rs` | data | The `--hosts` poller: reads each listed remote exporter's `/export`, replays its summary operations into host-qualified `Session`s, and marks a silent host stale |
 | `src/net.rs` | data | The only socket in the program: the shared `http_get` client (used by `--engines` and `--hosts`) and the `--export` `TcpListener`; `http://` only, short timeouts, capped replies |
+| `src/bin/ccorbit-export.rs` | bin | The light standalone exporter (server mode): a second binary that includes only the reader stack (`opencode`, `model`, `net`, `parse`, `price`, `time`) — no `ratatui` — and calls `Open::export_serve`. The same job `ccorbit --export` does, minus the wall |
 | `src/model.rs` | data | `Session::ingest`: steps, agents, background tasks, workflows and their live agents, tokens split by cache, phases (brainwave), files, compactions, durations by kind, price |
 | `src/parse.rs` | data | Small tolerant readers: tool kinds, summaries, workflow meta, call signatures and duration keys, paths |
 | `src/insight.rs` | data | Readings across sessions: slow and looping calls, collisions, workflow races, compaction ceilings and forecasts |

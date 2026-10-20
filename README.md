@@ -183,15 +183,16 @@ two roles, both opt-in: a **server** (`--export`) on each box publishes **body-f
 a **central** (`--hosts`) polls them into one wall; a host that is down degrades on its own (its
 cards dim, then leave) and never blocks the others.
 
-**Server mode** — on every host (including, if you like, the central one), publish its summaries. It
-is the same `ccorbit` binary from [Install](#install); there is no separate exporter package to get.
-To try it in the foreground:
+**Server mode** — on every host (including, if you like, the central one), publish its summaries.
+Two binaries do the identical job: **`ccorbit-export`** — the light wall-free exporter — or
+`ccorbit --export` from the full binary, on a box that also shows a wall. Both come from the one
+[Install](#install); there is no separate package. To try it in the foreground:
 
 ```sh
 mkdir -p ~/.config/ccorbit
 head -c 32 /dev/urandom | base64 > ~/.config/ccorbit/host-key   # one shared LAN key
 chmod 600 ~/.config/ccorbit/host-key
-ccorbit --export 0.0.0.0:30002                                    # publish this box's summaries
+ccorbit-export 0.0.0.0:30002                                      # or: ccorbit --export 0.0.0.0:30002
 ```
 
 It reads only this box's `opencode.db` (read-only), and answers `GET /export` — with the
@@ -207,7 +208,7 @@ Description=ccorbit exporter (publish this box's opencode summaries to a central
 After=network-online.target
 
 [Service]
-ExecStart=%h/.local/bin/ccorbit --export 0.0.0.0:30002
+ExecStart=%h/.local/bin/ccorbit-export 0.0.0.0:30002
 Restart=on-failure
 RestartSec=3
 
@@ -327,6 +328,7 @@ cargo run --release -- --dump  # check the readings against your own sessions
 | `src/engines.rs` | The read-only engine pulse: vLLM Prometheus and llama.cpp-style status over one short HTTP GET each |
 | `src/hosts.rs` | The `--hosts` poller: folds remote ccorbit exporters' summaries into the wall (host-qualified ids, per-host staleness and backoff) |
 | `src/net.rs` | The only socket code: the shared `http_get` client (behind `--engines` and `--hosts`) and the `--export` `TcpListener` |
+| `src/bin/ccorbit-export.rs` | The light standalone exporter (server mode): the same reader compiled without the terminal, so boxes you only publish from carry none of the wall |
 | `src/model.rs` | Session state built from transcript lines: steps, agents, tokens, phases, files, compactions |
 | `src/insight.rs` | Readings across sessions: slow and looping calls, collisions, workflow races, compaction ceilings |
 | `src/price.rs` | API list prices |

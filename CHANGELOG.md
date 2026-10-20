@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **`ccorbit-export`, a light standalone exporter (server mode):** the reader stack compiled without
+  the terminal (`src/bin/ccorbit-export.rs`) — the same `GET /export`, but no `ratatui` (about
+  2.4 MB vs 3.4 MB) — for the boxes you only *publish from*. `ccorbit --export` still does the
+  identical job from the full binary. The `--export`/`--hosts` protocol and the shared
+  `~/.config/ccorbit/host-key` are unchanged.
+
 ## 0.4.0 - 2026-10-20
 
 - **Remote opencode hosts** (`--hosts <FILE>` + `--export <ADDR>`): one central ccorbit watches

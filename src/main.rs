@@ -154,7 +154,7 @@ fn main() -> ExitCode {
     // The exporter is a daemon mode: read the database, answer GET /export, never draw a screen.
     if let Some(bind) = opts.export.clone() {
         let key = net::read_key(&net::expand_home("~/.config/ccorbit/host-key"));
-        let name = host_name_for(&bind);
+        let name = net::host_name_for(&bind);
         if let Err(e) = opencode::Open::export_serve(opts.db_path.clone(), &bind, key.as_deref(), name) {
             eprintln!("ccorbit: {e}");
             return ExitCode::FAILURE;
@@ -221,20 +221,4 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-/// The name the exporter puts in its envelope, shown on each remote card. A bind address that names
-/// a real host uses it; a wildcard bind falls back to the machine's own hostname (read from files
-/// and the environment — never a command).
-fn host_name_for(bind: &str) -> String {
-    let host = bind.rsplit_once(':').map(|(h, _)| h).unwrap_or(bind);
-    if !host.is_empty() && host != "0.0.0.0" && host != "::" && host != "*" {
-        return host.to_string();
-    }
-    std::fs::read_to_string("/etc/hostname")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("HOSTNAME").ok().filter(|s| !s.is_empty()))
-        .unwrap_or_else(|| "host".to_string())
 }
