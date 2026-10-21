@@ -435,6 +435,46 @@ impl Open {
                 sessions[si].title = title.clone();
                 changed = true;
             }
+            // opencode's revert/undo deletes the transcript suffix. If a row we already read is now
+            // gone (our message cursor sits past the newest remaining row), rebuild this session
+            // from what still exists: clear its Session, its lanes (root + children) and its op log,
+            // so the read below restarts clean. Without this, deleted rows stay baked into the card
+            // forever (ghost steps, an op log that balloons to the cap and, before the total fix,
+            // froze the card).
+            {
+                let mut shrank = false;
+                if let Some(l) = self.lanes.get(id.as_str()) {
+                    if l.msg_row > 0 && newest_rowid(conn, id)? < l.msg_row {
+                        shrank = true;
+                    } else {
+                        for kid in l.children.keys() {
+                            if let Some(k) = self.lanes.get(kid)
+                                && k.msg_row > 0
+                                && newest_rowid(conn, kid)? < k.msg_row
+                            {
+                                shrank = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if shrank {
+                    let kids: Vec<String> = self.lanes.get(id.as_str()).map(|l| l.children.keys().cloned().collect()).unwrap_or_default();
+                    for kid in kids {
+                        self.lanes.remove(&kid);
+                    }
+                    self.lanes.remove(id.as_str());
+                    self.op_log.remove(id.as_str());
+                    self.op_total.remove(id.as_str());
+                    let mut fresh = Session::new(id);
+                    fresh.cwd = dir.clone();
+                    fresh.title = title.clone();
+                    fresh.name = format!("projects-{}", tag_of(id));
+                    fresh.alive = true;
+                    sessions[si] = fresh;
+                    changed = true;
+                }
+            }
             let mut lane = self.lanes.remove(id).unwrap_or_default();
             if lane.model.is_empty() {
                 lane.model = model.clone();
@@ -742,6 +782,12 @@ fn last_message(conn: &Connection, sid: &str) -> rusqlite::Result<(Option<String
     )
     .optional()
     .map(|o| o.unwrap_or((None, None)))
+}
+
+/// The highest `message.rowid` still present for a session. rowids never decrease unless rows are
+/// deleted, so a value below our read cursor means opencode's revert/undo removed the suffix.
+fn newest_rowid(conn: &Connection, sid: &str) -> rusqlite::Result<i64> {
+    conn.query_row("select coalesce(max(rowid), 0) from message where session_id = ?1", params![sid], |r| r.get(0))
 }
 
 fn tool_of(v: &Value) -> &str {
@@ -1303,5 +1349,49 @@ mod tests {
         // Once answered (ended), it never holds.
         s.ingest(0, &json!({"type":"user","timestamp":fmt_iso(90_500),"message":{"content":[{"type":"tool_result","tool_use_id":"q","is_error":false,"content":"answered"}]}}).to_string());
         assert!(!question_is_live(s.step_by_tool("q").unwrap(), 90_000), "answered: ended");
+    }
+
+    #[test]
+    fn a_revert_that_deletes_the_suffix_resyncs_the_session() {
+        // opencode's revert/undo deletes the transcript suffix. The reader must notice its cursor is
+        // past the newest remaining row and rebuild the session from what is left -- not keep the
+        // deleted step as a ghost (nor let the op log balloon to the cap with it).
+        let path = std::env::temp_dir().join(format!("ccorbit-revert-{}-{}.db", std::process::id(), {
+            static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        }));
+        let _ = std::fs::remove_file(&path);
+        {
+            let c = Connection::open(&path).unwrap();
+            c.execute_batch(
+                "create table session (id text primary key, parent_id text, directory text, title text, model text, time_created int, time_archived int, time_updated int);
+                 create table message (id text primary key, session_id text, data text, time_created int, time_updated int);
+                 create table part (id text primary key, session_id text, message_id text, data text, time_created int, time_updated int);",
+            )
+            .unwrap();
+            c.execute("insert into session values ('r',null,'/d','R','{\"id\":\"qwen3.8\"}',1000,null,100000)", []).unwrap();
+            c.execute("insert into message values ('m1','r','{\"role\":\"assistant\",\"time\":{\"completed\":1000}}',1000,1000)", []).unwrap();
+            c.execute("insert into message values ('m2','r','{\"role\":\"assistant\",\"time\":{\"completed\":2000}}',2000,2000)", []).unwrap();
+            c.execute("insert into part values ('p1','r','m1','{\"type\":\"tool\",\"tool\":\"bash\",\"callID\":\"c1\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"ls\"},\"output\":\"ok\"}}',1000,1000)", []).unwrap();
+            c.execute("insert into part values ('p2','r','m2','{\"type\":\"tool\",\"tool\":\"bash\",\"callID\":\"c2\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"pwd\"},\"output\":\"ok\"}}',2000,2000)", []).unwrap();
+        }
+        let mut oc = Open::watch(path.clone());
+        assert!(oc.connect(), "opens the temp database read-only");
+        let mut sessions: Vec<Session> = Vec::new();
+        oc.poll(&mut sessions, 100_000).unwrap();
+        let s = sessions.iter().find(|x| x.id == "r").expect("the session");
+        assert!(s.step_by_tool("c1:m1").is_some() && s.step_by_tool("c2:m2").is_some(), "both calls read before the revert");
+
+        // Revert: opencode removes the message after the rewind point (and its parts).
+        {
+            let c = Connection::open(&path).unwrap();
+            c.execute("delete from part where id = 'p2'", []).unwrap();
+            c.execute("delete from message where id = 'm2'", []).unwrap();
+        }
+        oc.poll(&mut sessions, 200_000).unwrap(); // same connection: it must observe the deletion and rebuild
+        let s = sessions.iter().find(|x| x.id == "r").expect("the session");
+        assert!(s.step_by_tool("c1:m1").is_some(), "the kept step survives the rebuild");
+        assert!(s.step_by_tool("c2:m2").is_none(), "the reverted-away step was resynced out, not left as a ghost");
+        let _ = std::fs::remove_file(&path);
     }
 }
