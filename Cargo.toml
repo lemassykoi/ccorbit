@@ -1,6 +1,6 @@
 [package]
 name = "ccorbit"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 authors = ["Clément PAPPALARDO", "Pierre CANGEMI"]
 description = "A live, read-only terminal view of every opencode session on this machine: wall, 3D HUD, code city"

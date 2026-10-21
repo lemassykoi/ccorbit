@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.2 - 2026-10-21
+
+- **Fix: a long-running host session froze its card once the op log hit the cap.** A big session
+  (e.g. a 476-message Jarvis) grew its exporter op log to `MAX_OPS`; the central rebuilt a card only
+  when the *retained length* changed, which stops changing at the cap -- so the card froze stale and
+  lost its subagent moons. The exporter now ships a monotonic operation total that drives rebuilds,
+  the cap is raised, and per-session logs are pruned to the active set (an app that mints a session
+  per command no longer leaks them in the exporter).
+- **Fix: a host session now rebuilds when opencode reverts.** opencode's revert/undo deletes the
+  transcript suffix, but the reader only moves its rowid cursor forward, so deleted rows lingered as
+  ghost steps. The reader now detects the shrink (newest row behind its cursor) and rebuilds the
+  session -- Session, lanes and op log -- from what still exists.
+
 ## 0.4.1 - 2026-10-20
 
 - **`ccorbit-export`, a light standalone exporter (server mode):** the reader stack compiled without
