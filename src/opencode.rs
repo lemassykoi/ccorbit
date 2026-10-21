@@ -63,10 +63,11 @@ pub const EXPORT_FORMAT: u32 = 1;
 pub const OPENCODE_SEEN: &str = "1.19.0";
 /// The route the exporter answers on, and the same the poller asks for.
 const EXPORT_ROUTE: &str = "/export";
-/// Never emit more than this many operations for one session; past it the log is rebuilt from the
-/// head (a session that lives longer than this is shown from its recent history, like the wall's
-/// own item trim). Generous: a 20-minute-active session rarely reaches a thousand.
-const MAX_OPS: usize = 8000;
+/// Never retain more than this many operations for one session; past it the retained log drops its
+/// oldest operations (the central rebuilds from the remaining window). High enough that a long-lived
+/// session is not starved -- the old 8000 pinned a 476-message Jarvis at the cap and froze its card.
+/// It is the monotonic `op_total`, not this retained length, that drives central rebuilds.
+const MAX_OPS: usize = 40_000;
 
 /// One step of the reader's work on a session, recorded so a remote ccorbit can replay it onto its
 /// own `Session` and land in exactly the state the local reader would. These are the *only*
@@ -222,6 +223,10 @@ pub struct Open {
     /// so a central ccorbit can replay it. The local wall never sets this.
     exporting: bool,
     op_log: HashMap<String, Vec<Op>>,
+    /// Per-session count of operations ever emitted (monotonic, survives `op_log` front-trim), so a
+    /// central rebuilds whenever there is *new* activity -- not on the retained length, which
+    /// plateaus once a long session hits `MAX_OPS` and would otherwise freeze the card.
+    op_total: HashMap<String, usize>,
 }
 
 /// What has been read and emitted for one opencode session.
@@ -251,13 +256,31 @@ struct Lane {
 impl Open {
     /// Starts following a database for the local wall; nothing is read until the first `tick`.
     pub fn watch(db_path: PathBuf) -> Open {
-        Open { db_path, conn: None, last_poll: None, lanes: HashMap::new(), servers: mcp_servers(), exporting: false, op_log: HashMap::new() }
+        Open {
+            db_path,
+            conn: None,
+            last_poll: None,
+            lanes: HashMap::new(),
+            servers: mcp_servers(),
+            exporting: false,
+            op_log: HashMap::new(),
+            op_total: HashMap::new(),
+        }
     }
 
     /// Starts a reader in export mode (`--export`): `tick` records every operation into `op_log` so
     /// `envelope` can hand it to a central ccorbit. It reads the same database the same way.
     fn watch_export(db_path: PathBuf) -> Open {
-        Open { db_path, conn: None, last_poll: None, lanes: HashMap::new(), servers: mcp_servers(), exporting: true, op_log: HashMap::new() }
+        Open {
+            db_path,
+            conn: None,
+            last_poll: None,
+            lanes: HashMap::new(),
+            servers: mcp_servers(),
+            exporting: true,
+            op_log: HashMap::new(),
+            op_total: HashMap::new(),
+        }
     }
 
     /// Run the `--export` endpoint: follow `db_path`, and answer one `GET /export` with the current
@@ -297,7 +320,7 @@ impl Open {
                     title: s.title.clone(),
                     model: s.agents.first().map(|a| a.model.clone()).unwrap_or_default(),
                     children: lane.map(|l| l.children.keys().cloned().collect()).unwrap_or_default(),
-                    count: self.op_log.get(&s.id).map_or(0, Vec::len),
+                    count: self.op_total.get(&s.id).copied().unwrap_or(0),
                     ops: self.op_log.get(&s.id).cloned().unwrap_or_default(),
                 }
             })
@@ -385,6 +408,13 @@ impl Open {
                 self.lanes.remove(&key);
             }
         }
+        if self.exporting {
+            // A central only ever polls the currently-active sessions, and an app like the voice
+            // dispatcher mints a fresh session id per command -- so drop the op logs of sessions that
+            // left the window, or the exporter would grow without bound.
+            self.op_log.retain(|id, _| active.contains_key(id.as_str()));
+            self.op_total.retain(|id, _| active.contains_key(id.as_str()));
+        }
 
         for (id, _parent, dir, title, model) in &roots {
             let si = match sessions.iter().position(|s| &s.id == id) {
@@ -410,6 +440,7 @@ impl Open {
                 lane.model = model.clone();
             }
             let mut log: Vec<Op> = if self.exporting { self.op_log.remove(id).unwrap_or_default() } else { Vec::new() };
+            let pre = log.len(); // to count this tick's new operations into the monotonic total
             let (rc, r) = read_session(conn, &mut sessions[si], id, 0, &mut lane, now, &self.servers, self.exporting)?;
             changed |= rc;
             log.extend(r);
@@ -477,9 +508,14 @@ impl Open {
             }
             self.lanes.insert(id.clone(), lane);
             if self.exporting {
+                // Count this tick's new operations into the monotonic total before the retained log
+                // is trimmed -- the central rebuilds on this total, so a long session that hits
+                // MAX_OPS (where the retained length stops changing) must still signal new activity.
+                let added = log.len() - pre;
                 if log.len() > MAX_OPS {
                     log.drain(..log.len() - MAX_OPS);
                 }
+                *self.op_total.entry(id.clone()).or_insert(0) += added;
                 self.op_log.insert(id.clone(), log);
             }
         }

@@ -171,15 +171,15 @@ impl Host {
         for hs in &env.sessions {
             let qual = format!("{me}:{}", hs.id);
             present.insert(qual.clone());
-            // Rebuild from the whole operation log whenever it changed (or the card is new). The
-            // exporter ships the full log each poll, in the order the reader produced it, so a
-            // child's AddAgent always precedes its Ingest lines; replaying the full list onto a
-            // fresh Session is correct by construction. The old suffix-append assumed `ops[..done]`
-            // was an unchanged prefix -- but a host restart/re-emit shifts that prefix, the
-            // AddAgent falls in the skipped range, and an Ingest for a never-registered agent
-            // then indexes `self.agents` out of bounds (a crash). Rebuilding removes that class.
+            // Rebuild from the whole operation log whenever the host signals new activity. The
+            // trigger is `hs.count`, the exporter's monotonic total of operations ever emitted -- NOT
+            // the retained log length: a long session that hits MAX_OPS keeps a constant retained
+            // length while its contents shift, and rebuilding on that length froze the card (a
+            // 476-message Jarvis). The exporter ships the full retained log in reader order, so a
+            // child's AddAgent always precedes its Ingest lines; replaying it onto a fresh Session is
+            // correct by construction (and removes the earlier suffix-append crash class).
             let built = applied.get(&qual).copied();
-            if built != Some(hs.ops.len()) {
+            if built != Some(hs.count) {
                 let mut fresh = Session::new(&qual);
                 fresh.host = me.clone();
                 fresh.name = format!("projects-{}", tag_of(&hs.id));
@@ -194,7 +194,7 @@ impl Host {
                     Some(i) => sessions[i] = fresh,
                     None => sessions.push(fresh),
                 }
-                applied.insert(qual, hs.ops.len());
+                applied.insert(qual, hs.count);
                 changed = true;
             } else if let Some(i) = sessions.iter().position(|s| s.id == qual) {
                 // Log unchanged: still pick up a folder or title the host renamed.
@@ -434,6 +434,42 @@ mod tests {
         let s = sessions.iter().find(|s| s.id == "a:ses_1").expect("the card");
         assert_eq!(s.agents.len(), 2, "the child agent was built, not skipped (and no panic)");
         assert!(s.step_by_tool("tc").is_some(), "the child's step replayed onto its agent");
+    }
+
+    #[test]
+    fn a_capped_log_still_rebuilds_when_the_total_grows() {
+        // The freeze: a long session hits MAX_OPS, so the retained log length stops changing while
+        // new activity still happens (front trimmed as the tail grows). Rebuild must key on the
+        // monotonic `count`, not the retained length -- the old length check froze the card.
+        let mut a = a_host("a");
+        let mut sessions: Vec<Session> = Vec::new();
+        let mut applied: HashMap<String, usize> = HashMap::new();
+        let s1 = HostSession {
+            id: "s".into(),
+            directory: "/d".into(),
+            title: "t".into(),
+            model: String::new(),
+            children: vec![],
+            count: 9_000,
+            ops: edit_ops("c1", "/f.ts"),
+        };
+        a.ingest(&body("a", vec![s1]), &mut sessions, 5000, &mut applied);
+        assert_eq!(applied.get("a:s").copied(), Some(9_000));
+        // Same retained length (2 ops) but the total advanced -> must rebuild from the new tail.
+        let s2 = HostSession {
+            id: "s".into(),
+            directory: "/d".into(),
+            title: "t".into(),
+            model: String::new(),
+            children: vec![],
+            count: 9_001,
+            ops: edit_ops("c2", "/g.ts"),
+        };
+        a.ingest(&body("a", vec![s2]), &mut sessions, 5000, &mut applied);
+        assert_eq!(applied.get("a:s").copied(), Some(9_001), "rebuild fired on the total, not the length");
+        let s = sessions.iter().find(|s| s.id == "a:s").unwrap();
+        assert!(s.files.contains_key("/g.ts"), "rebuilt from the fresh retained tail");
+        assert!(!s.files.contains_key("/f.ts"), "the old retained state was replaced");
     }
 
     #[test]
