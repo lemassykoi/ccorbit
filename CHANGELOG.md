@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **`--trace`, an observability mode:** streams what ccorbit sees to **stderr** (never a file -- the
+  read-only promise holds; redirect with `2>trace.log`) on every change and every few seconds:
+  per-session counts (agents/steps/mcp/skills/files/tokens), each host's poll latency + clock skew,
+  the tick and frame timings, and -- for remote cards -- a replay check that compares the exporter's
+  reported operation/child counts against what the central actually rebuilt, flagging `DRIFT`. Built
+  to catch a lagging director (slow host GET stalling the loop) and a remote card that shows less than
+  its local twin.
+
 ## 0.4.2 - 2026-10-21
 
 - **Fix: a long-running host session froze its card once the op log hit the cap.** A big session

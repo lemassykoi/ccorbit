@@ -261,9 +261,23 @@ pub fn run(term: &mut DefaultTerminal, mut world: World, opts: &Opts) -> io::Res
     let mut last_tick = Instant::now();
     let mut last_draw: Option<Instant> = None;
     let mut dirty = true;
+    // `--trace` state: emit a timestamped snapshot to stderr when what we see changes, or every few
+    // seconds as a heartbeat. It writes no file (the caller redirects), so the read-only promise holds.
+    let mut last_trace = Instant::now();
+    let mut last_fp: u64 = u64::MAX;
+    let mut do_trace = false;
+    let (mut tick_ms, mut frame_ms) = (0.0f64, 0.0f64);
     loop {
         if last_tick.elapsed() >= tick_every {
+            let t0 = Instant::now();
             dirty |= world.tick();
+            if opts.trace {
+                tick_ms = t0.elapsed().as_secs_f64() * 1000.0;
+                let fp = trace_fingerprint(&world);
+                if fp != last_fp || last_trace.elapsed() >= Duration::from_secs(5) {
+                    do_trace = true;
+                }
+            }
             dirty |= app.engines.poll();
             dirty |= collect_toasts(&mut app, &world);
             last_tick = Instant::now();
@@ -287,9 +301,21 @@ pub fn run(term: &mut DefaultTerminal, mut world: World, opts: &Opts) -> io::Res
             500
         });
         if dirty || last_draw.is_none_or(|t| t.elapsed() >= every) {
+            let t1 = Instant::now();
             term.draw(|f| draw(f, &mut app, &world))?;
+            if opts.trace {
+                frame_ms = t1.elapsed().as_secs_f64() * 1000.0;
+            }
             last_draw = Some(Instant::now());
             dirty = false;
+        }
+        if do_trace {
+            for line in trace_lines(&world, tick_ms, frame_ms) {
+                eprintln!("{line}");
+            }
+            do_trace = false;
+            last_fp = trace_fingerprint(&world);
+            last_trace = Instant::now();
         }
         let until_tick = tick_every.saturating_sub(last_tick.elapsed());
         let until_draw = every.saturating_sub(last_draw.map_or(Duration::ZERO, |t| t.elapsed()));
@@ -2482,6 +2508,64 @@ pub fn snapshot(world: &World, opts: &Opts, w: u16, h: u16) -> String {
 }
 
 /// Every session, fully expanded, as plain text.
+/// A cheap signature of "what we see", so `--trace` speaks only when the picture actually moves.
+fn trace_fingerprint(world: &World) -> u64 {
+    let mut h = world.sessions.len() as u64;
+    for s in &world.sessions {
+        h = h.wrapping_mul(1000003)
+            ^ (s.agents.len() as u64)
+            ^ ((s.mcp.len() as u64) << 3)
+            ^ ((s.skills.len() as u64) << 5)
+            ^ (s.files.len() as u64)
+            ^ (s.steps().count() as u64)
+            ^ (s.status.as_bytes().iter().fold(0u64, |a, b| a.wrapping_add(*b as u64)) << 7);
+        h ^= s.id.len() as u64;
+    }
+    h
+}
+
+/// One `--trace` snapshot: the tick/frame timings, one line per host, one per session, and -- for a
+/// remote card -- the exporter-vs-central fidelity delta. Written to stderr by the caller (`2>f`).
+fn trace_lines(world: &World, tick_ms: f64, frame_ms: f64) -> Vec<String> {
+    let iso = crate::time::fmt_iso(world.now);
+    let clock = iso.get(11..19).unwrap_or(iso.as_str());
+    let busy = world.sessions.iter().filter(|s| s.busy()).count();
+    let mut out = vec![format!("ccorbit trace {clock} tick={tick_ms:.1}ms frame={frame_ms:.1}ms sessions={} busy={busy}", world.sessions.len())];
+    out.extend(world.hosts.trace());
+    for s in &world.sessions {
+        let host = if s.host.is_empty() { "local" } else { s.host.as_str() };
+        let tk = s.tokens();
+        out.push(format!(
+            "  sess {host} {} st={} alive={} agents={} steps={} mcp={} skills={} files={} in={} out={}",
+            s.id,
+            s.status,
+            s.alive,
+            s.agents.len(),
+            s.steps().count(),
+            s.mcp.len(),
+            s.skills.len(),
+            s.files.len(),
+            tk.input,
+            tk.output
+        ));
+        // For a remote card, compare what the exporter said it has with what the replay produced.
+        if !s.host.is_empty()
+            && let Some((count, retained, children)) = world.hosts.reported.get(&s.id)
+        {
+            let want_agents = *children as usize + 1;
+            let verdict = if want_agents > s.agents.len() {
+                format!("DRIFT: exporter reported {want_agents} agents, central replayed {}", s.agents.len())
+            } else if *retained > 1 && s.steps().count() == 0 {
+                format!("DRIFT: exporter {retained} retained ops, central 0 steps")
+            } else {
+                "ok".to_string()
+            };
+            out.push(format!("    replay total={count} retained={retained} children={children} -> {verdict}"));
+        }
+    }
+    out
+}
+
 pub fn dump(world: &mut World, opts: &Opts) -> String {
     // The engine pulse is asked for by --engines; one poll here, so a headless dump shows it.
     let mut engines = opts.engines.as_deref().map(Engines::load).unwrap_or_else(Engines::none);
@@ -2579,6 +2663,30 @@ pub fn dump(world: &mut World, opts: &Opts) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trace_flags_a_remote_card_that_replayed_fewer_than_reported() {
+        let now = 1_790_000_000_000_i64;
+        let mut local = Session::new("ses_local");
+        local.alive = true;
+        local.status = "busy".into();
+        local.name = "projects-abcd".into();
+        let mut remote = Session::new("nipogi:ses_r");
+        remote.alive = true;
+        remote.host = "nipogi".into();
+        remote.name = "projects-efgh".into();
+        remote.status = "idle".into();
+        let mut world = World::probe(vec![local, remote], now);
+        // The exporter says the remote card has 2 children and 5 retained ops; the central replayed
+        // neither (a bare fresh session) -- exactly the director/satellite symptom this catches.
+        world.hosts.reported.insert("nipogi:ses_r".to_string(), (5, 5, 2));
+        let joined = trace_lines(&world, 1.2, 0.4).join("\n");
+        assert!(joined.contains("ccorbit trace"), "the header names the mode");
+        assert!(joined.contains("sess local ses_local"), "the local card is listed:\n{joined}");
+        assert!(joined.contains("sess nipogi nipogi:ses_r"), "the remote card names its host");
+        assert!(joined.contains("replay total=5 retained=5 children=2"), "the exporter's report is shown");
+        assert!(joined.contains("DRIFT"), "the under-replay is flagged:\n{joined}");
+    }
 
     #[test]
     fn the_same_notice_twice_shows_once_with_a_count() {

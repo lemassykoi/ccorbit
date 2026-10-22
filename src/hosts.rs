@@ -41,25 +41,31 @@ pub struct Host {
     /// `host clock − central clock` at the last good answer, ms. Used only for age labels; the
     /// busy/idle verdict is made on the host, so skew cannot flip it.
     pub skew_ms: i64,
+    /// How long the last poll's GET took, ms (0 before the first). Read by `--trace` to show a host
+    /// that is slow to answer -- the kind of stall that makes the wall (and the director) lag.
+    pub last_ms: u128,
 }
 
 pub struct Hosts {
     pub list: Vec<Host>,
     pub error: Option<String>,
-    /// qualified id ("host:ses_…") → operations already replayed, so each poll appends only the tail.
+    /// qualified id ("host:ses_…") → operations already replayed, so each poll rebuilds only on change.
     applied: HashMap<String, usize>,
+    /// qualified id → what the exporter *said* it had (`total ops`, `retained ops`, `children`). Held
+    /// for `--trace`, which compares it with the central's replayed `Session` to spot a fidelity gap.
+    pub reported: HashMap<String, (u64, u64, u64)>,
 }
 
 impl Hosts {
     /// No `--hosts`: the central watches only its own machine.
     pub fn none() -> Hosts {
-        Hosts { list: Vec::new(), error: None, applied: HashMap::new() }
+        Hosts { list: Vec::new(), error: None, applied: HashMap::new(), reported: HashMap::new() }
     }
 
     /// Reads the file; a bad path or bad file is kept as `error` and shown, not fatal (like `--engines`).
     pub fn load(path: &std::path::Path) -> Hosts {
         match std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
-            None => Hosts { list: Vec::new(), error: Some(format!("cannot read {}", path.display())), applied: HashMap::new() },
+            None => Hosts { list: Vec::new(), error: Some(format!("cannot read {}", path.display())), applied: HashMap::new(), reported: HashMap::new() },
             Some(v) => {
                 let mut list = Vec::new();
                 for e in v.as_array().into_iter().flatten() {
@@ -81,9 +87,10 @@ impl Hosts {
                         seen: 0,
                         error: None,
                         skew_ms: 0,
+                        last_ms: 0,
                     });
                 }
-                Hosts { list, error: None, applied: HashMap::new() }
+                Hosts { list, error: None, applied: HashMap::new(), reported: HashMap::new() }
             }
         }
     }
@@ -94,7 +101,7 @@ impl Hosts {
     pub fn tick(&mut self, sessions: &mut Vec<Session>, now: i64) -> bool {
         let mut changed = false;
         for h in &mut self.list {
-            changed |= h.poll(sessions, now, &mut self.applied);
+            changed |= h.poll(sessions, now, &mut self.applied, &mut self.reported);
         }
         changed
     }
@@ -107,17 +114,44 @@ impl Hosts {
         }
         out
     }
+
+    /// Per-host telemetry lines for `--trace`: the poll latency and the reported session count, so a
+    /// slow or half-dead host is visible in the log next to the wall's own timings.
+    pub fn trace(&self) -> Vec<String> {
+        self.list
+            .iter()
+            .map(|h| {
+                let err = h.error.as_ref().map(|e| format!(" err={e}")).unwrap_or_default();
+                let stale = if h.stale { " stale" } else { "" };
+                format!(
+                    "  host {name} alive={alive}{stale} get={ms}ms sessions={seen} skew={skew}ms{err}",
+                    name = h.name,
+                    alive = h.alive,
+                    stale = stale,
+                    ms = h.last_ms,
+                    seen = h.seen,
+                    skew = h.skew_ms / 1000,
+                    err = err
+                )
+            })
+            .collect()
+    }
 }
 
 impl Host {
-    fn poll(&mut self, sessions: &mut Vec<Session>, now: i64, applied: &mut HashMap<String, usize>) -> bool {
+    fn poll(&mut self, sessions: &mut Vec<Session>, now: i64, applied: &mut HashMap<String, usize>, reported: &mut HashMap<String, (u64, u64, u64)>) -> bool {
         if self.next_poll.is_some_and(|t| t.elapsed() < POLL_EVERY) {
             return false;
         }
         let endpoint = self.export_url();
+        let t0 = Instant::now();
         match net::http_get(&endpoint, self.token.as_deref()) {
-            Ok(body) => self.ingest(&body, sessions, now, applied),
+            Ok(body) => {
+                self.last_ms = t0.elapsed().as_millis();
+                self.ingest(&body, sessions, now, applied, reported)
+            }
             Err(_) => {
+                self.last_ms = t0.elapsed().as_millis();
                 self.fail += 1;
                 self.next_poll = Some(Instant::now() + POLL_EVERY.mul_f32((self.fail.min(4) as f32) * 2.0).min(MAX_BACKOFF));
                 self.stale = self.last_ok.is_some_and(|t| t.elapsed() >= STALE_AFTER);
@@ -130,6 +164,7 @@ impl Host {
                     sessions.retain(|s| s.host != me);
                     if sessions.len() != before {
                         applied.retain(|k, _| !k.starts_with(&prefix));
+                        reported.retain(|k, _| !k.starts_with(&prefix));
                         return true;
                     }
                 }
@@ -139,7 +174,14 @@ impl Host {
     }
 
     /// Parse and apply one envelope. A wrong format or opencode version is surfaced, never guessed.
-    fn ingest(&mut self, body: &str, sessions: &mut Vec<Session>, now: i64, applied: &mut HashMap<String, usize>) -> bool {
+    fn ingest(
+        &mut self,
+        body: &str,
+        sessions: &mut Vec<Session>,
+        now: i64,
+        applied: &mut HashMap<String, usize>,
+        reported: &mut HashMap<String, (u64, u64, u64)>,
+    ) -> bool {
         let parsed = serde_json::from_str::<Value>(body).ok().and_then(|v| HostEnvelope::from_json(&v));
         self.next_poll = Some(Instant::now() + POLL_EVERY);
         let Some(env) = parsed else {
@@ -171,6 +213,9 @@ impl Host {
         for hs in &env.sessions {
             let qual = format!("{me}:{}", hs.id);
             present.insert(qual.clone());
+            // What the exporter says this session holds -- kept for `--trace` to diff against the
+            // central's replayed Session (a mismatch localises a fidelity gap to the replay).
+            reported.insert(qual.clone(), (hs.count as u64, hs.ops.len() as u64, hs.children.len() as u64));
             // Rebuild from the whole operation log whenever the host signals new activity. The
             // trigger is `hs.count`, the exporter's monotonic total of operations ever emitted -- NOT
             // the retained log length: a long session that hits MAX_OPS keeps a constant retained
@@ -223,6 +268,7 @@ impl Host {
         if sessions.len() != before {
             let prefix = format!("{me}:");
             applied.retain(|k, _| !k.starts_with(&prefix) || present.contains(k));
+            reported.retain(|k, _| !k.starts_with(&prefix) || present.contains(k));
             changed = true;
         }
         self.seen = present.len();
@@ -310,6 +356,7 @@ mod tests {
             seen: 0,
             error: None,
             skew_ms: 0,
+            last_ms: 0,
         }
     }
 
@@ -321,8 +368,9 @@ mod tests {
         let mut b = a_host("b");
         let mut sessions: Vec<Session> = Vec::new();
         let mut applied: HashMap<String, usize> = HashMap::new();
-        a.ingest(&body("a", vec![hs("ses_1", "/home/u/app", "/home/u/app/x.ts")]), &mut sessions, 5000, &mut applied);
-        b.ingest(&body("b", vec![hs("ses_1", "/home/u/app", "/home/u/app/x.ts")]), &mut sessions, 5000, &mut applied);
+        let mut reported: HashMap<String, (u64, u64, u64)> = HashMap::new();
+        a.ingest(&body("a", vec![hs("ses_1", "/home/u/app", "/home/u/app/x.ts")]), &mut sessions, 5000, &mut applied, &mut reported);
+        b.ingest(&body("b", vec![hs("ses_1", "/home/u/app", "/home/u/app/x.ts")]), &mut sessions, 5000, &mut applied, &mut reported);
 
         assert_eq!(sessions.len(), 2, "both hosts' sessions are present");
         let mut ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
@@ -339,8 +387,9 @@ mod tests {
         let mut a = a_host("a");
         let mut sessions: Vec<Session> = Vec::new();
         let mut applied: HashMap<String, usize> = HashMap::new();
+        let mut reported: HashMap<String, (u64, u64, u64)> = HashMap::new();
         let both = vec![hs("ses_1", "/home/u/app", "/home/u/app/x.ts"), hs("ses_2", "/home/u/app", "/home/u/app/x.ts")];
-        a.ingest(&body("a", both), &mut sessions, 5000, &mut applied);
+        a.ingest(&body("a", both), &mut sessions, 5000, &mut applied, &mut reported);
         let world = crate::source::World::probe(sessions, 5000);
         let cols = crate::insight::collisions(&world);
         assert_eq!(cols.len(), 1, "two local sessions editing one file collide");
@@ -354,14 +403,16 @@ mod tests {
         let mut a = a_host("a");
         let mut sessions: Vec<Session> = Vec::new();
         let mut applied: HashMap<String, usize> = HashMap::new();
+        let mut reported: HashMap<String, (u64, u64, u64)> = HashMap::new();
         a.ingest(
             &body("a", vec![hs("ses_1", "/home/u/app", "/home/u/app/x.ts"), hs("ses_2", "/home/u/app", "/home/u/app/y.ts")]),
             &mut sessions,
             5000,
             &mut applied,
+            &mut reported,
         );
         assert_eq!(sessions.len(), 2);
-        a.ingest(&body("a", vec![hs("ses_2", "/home/u/app", "/home/u/app/y.ts")]), &mut sessions, 6000, &mut applied);
+        a.ingest(&body("a", vec![hs("ses_2", "/home/u/app", "/home/u/app/y.ts")]), &mut sessions, 6000, &mut applied, &mut reported);
         assert_eq!(sessions.len(), 1, "the unreported session dropped");
         assert_eq!(sessions[0].id, "a:ses_2");
     }
@@ -373,6 +424,7 @@ mod tests {
         let mut a = a_host("a");
         let mut sessions: Vec<Session> = Vec::new();
         let mut applied: HashMap<String, usize> = HashMap::new();
+        let mut reported: HashMap<String, (u64, u64, u64)> = HashMap::new();
         // first: four operations (two edits of x.ts)
         let mut four = edit_ops("c1", "/home/u/app/x.ts");
         four.extend(edit_ops("c2", "/home/u/app/x.ts"));
@@ -385,7 +437,7 @@ mod tests {
             count: four.len(),
             ops: four,
         };
-        a.ingest(&body("a", vec![first]), &mut sessions, 5000, &mut applied);
+        a.ingest(&body("a", vec![first]), &mut sessions, 5000, &mut applied, &mut reported);
         assert_eq!(applied.get("a:ses_1").copied(), Some(4));
         // then: a shorter log (two operations) on a different file → a rebuild, not an append
         let ops = edit_ops("cz", "/home/u/app/z.ts");
@@ -398,7 +450,7 @@ mod tests {
             count: ops.len(),
             ops,
         };
-        a.ingest(&body("a", vec![second]), &mut sessions, 5000, &mut applied);
+        a.ingest(&body("a", vec![second]), &mut sessions, 5000, &mut applied, &mut reported);
         let s = sessions.iter().find(|s| s.id == "a:ses_1").unwrap();
         assert!(s.files.contains_key("/home/u/app/z.ts"), "rebuilt from the fresh log");
         assert!(!s.files.contains_key("/home/u/app/x.ts"), "the old state was replaced, not appended");
@@ -414,6 +466,7 @@ mod tests {
         let mut a = a_host("a");
         let mut sessions: Vec<Session> = Vec::new();
         let mut applied: HashMap<String, usize> = HashMap::new();
+        let mut reported: HashMap<String, (u64, u64, u64)> = HashMap::new();
         applied.insert("a:ses_1".to_string(), 3); // the stale cursor from before the desync
         let ops = vec![
             Op::Ingest { agent: 0, line: json!({"type":"user","timestamp":fmt_iso(1000),"message":{"content":"a"}}).to_string() },
@@ -430,7 +483,7 @@ mod tests {
             count: ops.len(),
             ops,
         };
-        a.ingest(&body("a", vec![hs]), &mut sessions, 5000, &mut applied);
+        a.ingest(&body("a", vec![hs]), &mut sessions, 5000, &mut applied, &mut reported);
         let s = sessions.iter().find(|s| s.id == "a:ses_1").expect("the card");
         assert_eq!(s.agents.len(), 2, "the child agent was built, not skipped (and no panic)");
         assert!(s.step_by_tool("tc").is_some(), "the child's step replayed onto its agent");
@@ -444,6 +497,7 @@ mod tests {
         let mut a = a_host("a");
         let mut sessions: Vec<Session> = Vec::new();
         let mut applied: HashMap<String, usize> = HashMap::new();
+        let mut reported: HashMap<String, (u64, u64, u64)> = HashMap::new();
         let s1 = HostSession {
             id: "s".into(),
             directory: "/d".into(),
@@ -453,7 +507,7 @@ mod tests {
             count: 9_000,
             ops: edit_ops("c1", "/f.ts"),
         };
-        a.ingest(&body("a", vec![s1]), &mut sessions, 5000, &mut applied);
+        a.ingest(&body("a", vec![s1]), &mut sessions, 5000, &mut applied, &mut reported);
         assert_eq!(applied.get("a:s").copied(), Some(9_000));
         // Same retained length (2 ops) but the total advanced -> must rebuild from the new tail.
         let s2 = HostSession {
@@ -465,7 +519,7 @@ mod tests {
             count: 9_001,
             ops: edit_ops("c2", "/g.ts"),
         };
-        a.ingest(&body("a", vec![s2]), &mut sessions, 5000, &mut applied);
+        a.ingest(&body("a", vec![s2]), &mut sessions, 5000, &mut applied, &mut reported);
         assert_eq!(applied.get("a:s").copied(), Some(9_001), "rebuild fired on the total, not the length");
         let s = sessions.iter().find(|s| s.id == "a:s").unwrap();
         assert!(s.files.contains_key("/g.ts"), "rebuilt from the fresh retained tail");
@@ -477,9 +531,10 @@ mod tests {
         let mut a = a_host("a");
         let mut sessions: Vec<Session> = Vec::new();
         let mut applied: HashMap<String, usize> = HashMap::new();
+        let mut reported: HashMap<String, (u64, u64, u64)> = HashMap::new();
         let bad =
             HostEnvelope { format: EXPORT_FORMAT + 1, opencode: OPENCODE_SEEN.to_string(), host: "a".into(), now: 0, sessions: vec![] }.to_json().to_string();
-        a.ingest(&bad, &mut sessions, 5000, &mut applied);
+        a.ingest(&bad, &mut sessions, 5000, &mut applied, &mut reported);
         assert!(!a.alive, "a wrong wire format is refused");
         assert!(a.error.as_deref().is_some_and(|e| e.contains("export v")), "and the strip says why");
     }

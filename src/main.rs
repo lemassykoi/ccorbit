@@ -42,6 +42,7 @@ OPTIONS:
     --fps <N>            Frames per second of the HUD (default 30)
     --no-boot            Skip the boot animation
     --dump               Print the current state as plain text and exit
+    --trace              Stream what ccorbit sees to stderr (per-poll state, host latency, timings)
     -h, --help           Show this help
     -V, --version        Show the version
 
@@ -61,6 +62,7 @@ pub struct Opts {
     pub theme: usize,
     pub boot: bool,
     pub dump: bool,
+    pub trace: bool,
     pub snapshot: Option<(u16, u16)>,
     pub hud: bool,
     pub director: bool,
@@ -82,6 +84,7 @@ impl Opts {
             theme: 0,
             boot: true,
             dump: false,
+            trace: false,
             snapshot: None,
             hud: false,
             director: false,
@@ -124,6 +127,7 @@ fn parse_args() -> Result<Opts, String> {
                 args.next();
             }
             "--dump" => o.dump = true,
+            "--trace" => o.trace = true,
             // Undocumented: prints one frame of each view, for checking the layout without a terminal.
             "--snapshot" => {
                 let size = args.next().ok_or("--snapshot needs WIDTHxHEIGHT")?;

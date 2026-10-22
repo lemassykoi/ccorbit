@@ -281,6 +281,7 @@ hosts", for why this is an exporter and not `opencode serve`.
 | `--export <ADDR>` | Publish this machine's summaries to other ccorbits, at `host:port` (see [Remote hosts](#remote-hosts)) |
 | `--no-boot` | Skip the boot animation |
 | `--dump` | Print every session and its readings as plain text, then exit |
+| `--trace` | Stream what ccorbit sees to stderr (per-poll state, host latency, poll/frame timings, remote-vs-local replay check); redirect it with `2>trace.log` |
 | `--help`, `--version` | Print the options, or the version, then exit |
 
 ## What it reads
@@ -360,6 +361,11 @@ Hidden options for checking things without a terminal:
 - `--snapshot WxH` prints one frame of each view as text.
 - `--snapshot-html WxH DIR` writes colored HTML frames you can open in a browser.
 - `--bench-hud WxH` draws 300 frames of the hologram and reports the time each took.
+- `--trace` (documented, not hidden) streams what ccorbit sees to stderr on every change and every few
+  seconds: per-session counts, each host's poll latency and clock skew, the tick/frame timings, and --
+  for remote cards -- a replay check comparing what the exporter reported against what the central
+  rebuilt. Redirect it with `2>trace.log` to diff against `--dump` or opencode's own session list when
+  a card looks wrong or the wall (or the director) seems to lag. It writes no file itself.
 
 ### Releasing
 
